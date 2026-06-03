@@ -1,0 +1,617 @@
+import React, { useState, useRef, useEffect } from "react";
+
+const C = {
+  paper: "#f4efe4",
+  paper2: "#ece4d3",
+  ink: "#221d15",
+  inkSoft: "#6a5f4d",
+  accent: "#b5512a",
+  accentSoft: "#ecd7c0",
+  line: "#d9cfbb",
+  card: "#fcf9f1",
+  warn: "#fef3c7",
+  warnText: "#92400e",
+  green: "#dcfce7",
+  greenText: "#166534",
+  greenBorder: "#86efac",
+  red: "#fee2e2",
+  redText: "#991b1b",
+  redBorder: "#fca5a5",
+};
+const sans = "'IBM Plex Sans KR', sans-serif";
+const serif = "'Gowun Batang', serif";
+
+// ── IndexedDB ──────────────────────────────────────────────────────
+const DB_NAME = "corenote";
+const DB_VER = 1;
+const STORE = "history";
+const MAX_HISTORY = 20;
+const REVIEW_DAYS = [1, 3, 7, 14, 30];
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VER);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE)) {
+        db.createObjectStore(STORE, { keyPath: "id", autoIncrement: true })
+          .createIndex("createdAt", "createdAt");
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function dbSave(item) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, "readwrite");
+    const store = tx.objectStore(STORE);
+    const addReq = store.add({ ...item, createdAt: Date.now() });
+    let newId = null;
+    addReq.onsuccess = () => { newId = addReq.result; };
+    store.index("createdAt").getAll().onsuccess = (e) => {
+      const all = e.target.result;
+      if (all.length > MAX_HISTORY)
+        all.slice(0, all.length - MAX_HISTORY).forEach((r) => store.delete(r.id));
+    };
+    tx.oncomplete = () => resolve(newId);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function dbLoad() {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const req = db.transaction(STORE, "readonly").objectStore(STORE).index("createdAt").getAll();
+    req.onsuccess = () => resolve([...req.result].reverse());
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function dbDelete(id) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, "readwrite");
+    tx.objectStore(STORE).delete(id);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function dbUpdate(id, updates) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, "readwrite");
+    const store = tx.objectStore(STORE);
+    const req = store.get(id);
+    req.onsuccess = () => { if (req.result) store.put({ ...req.result, ...updates }); };
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+// ── Utils ──────────────────────────────────────────────────────────
+const MAX_FILE_MB = 50;
+
+function fisherYates(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function reviewStatus(item) {
+  if (!item.nextReview) return null;
+  const days = Math.ceil((item.nextReview - Date.now()) / 86400000);
+  if (days <= 0) return { text: "복습 필요!", urgent: true };
+  if (days === 1) return { text: "내일 복습", urgent: false };
+  return { text: `${days}일 후 복습`, urgent: false };
+}
+
+// ── App ────────────────────────────────────────────────────────────
+export default function App() {
+  const [status, setStatus]       = useState("idle");
+  const [fileName, setFileName]   = useState("");
+  const [result, setResult]       = useState(null);
+  const [error, setError]         = useState("");
+  const [dragging, setDragging]   = useState(false);
+  const [copied, setCopied]       = useState(false);
+  const [progress, setProgress]   = useState({ message: "" });
+  const [history, setHistory]     = useState([]);
+
+  // quiz
+  const [revealed, setRevealed]         = useState({});
+  const [quizResults, setQuizResults]   = useState({});
+  const [showWrongOnly, setShowWrongOnly] = useState(false);
+  const [quizOrder, setQuizOrder]       = useState([]);
+
+  // memo
+  const [memos, setMemos]               = useState({});
+  const [editingMemo, setEditingMemo]   = useState(null);
+
+  // history tracking
+  const [currentHid, setCurrentHid]     = useState(null);
+
+  const inputRef = useRef(null);
+  const abortRef = useRef(null);
+
+  useEffect(() => { dbLoad().then(setHistory).catch(() => {}); }, []);
+
+  // ── quiz helpers ──
+  const initQuiz = (quiz) => {
+    setQuizOrder((quiz || []).map((_, i) => i));
+    setQuizResults({});
+    setShowWrongOnly(false);
+    setRevealed({});
+  };
+
+  const shuffleQuiz = () => {
+    setQuizOrder(fisherYates((result.quiz || []).map((_, i) => i)));
+    setRevealed({});
+  };
+
+  const resetQuiz = () => initQuiz(result?.quiz);
+
+  // ── memo helpers ──
+  const saveMemos = (m) => {
+    if (currentHid) dbUpdate(currentHid, { memos: m }).catch(() => {});
+  };
+
+  const handleMemoBlur = (key, value) => {
+    setEditingMemo(null);
+    const next = { ...memos, [key]: value };
+    setMemos(next);
+    saveMemos(next);
+  };
+
+  // ── spaced repetition ──
+  const markReviewed = async () => {
+    if (!currentHid) return;
+    const item = history.find((h) => h.id === currentHid);
+    const cnt = (item?.reviewCount || 0) + 1;
+    const days = REVIEW_DAYS[Math.min(cnt - 1, REVIEW_DAYS.length - 1)];
+    await dbUpdate(currentHid, { reviewCount: cnt, nextReview: Date.now() + days * 86400000 }).catch(() => {});
+    setHistory(await dbLoad().catch(() => history));
+  };
+
+  // ── SSE summarize ──
+  const summarize = async (base64, name) => {
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    try {
+      const res = await fetch("/api/summarize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pdf: base64 }),
+        signal: ctrl.signal,
+      });
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const parts = buf.split("\n\n");
+        buf = parts.pop() ?? "";
+        for (const part of parts) {
+          if (!part.startsWith("data: ")) continue;
+          let ev;
+          try { ev = JSON.parse(part.slice(6)); } catch { continue; }
+          if (ev.type === "progress") setProgress(ev);
+          if (ev.type === "done") {
+            setResult(ev.result);
+            setStatus("done");
+            initQuiz(ev.result.quiz);
+            setMemos({});
+            setCurrentHid(null);
+            dbSave({
+              fileName: name,
+              title: ev.result.title || name,
+              result: ev.result,
+              memos: {},
+              nextReview: Date.now() + 86400000,
+              reviewCount: 0,
+            }).then(async (newId) => {
+              setCurrentHid(newId);
+              setHistory(await dbLoad().catch(() => []));
+            }).catch(() => {});
+          }
+          if (ev.type === "error") { setError(ev.message); setStatus("error"); }
+        }
+      }
+    } catch (e) {
+      if (e.name === "AbortError") return;
+      setError("정리하는 중 문제가 생겼어요. 잠시 후 다시 시도하거나 다른 PDF로 시도해 주세요.");
+      setStatus("error");
+    }
+  };
+
+  const handleFile = (f) => {
+    if (!f) return;
+    if (f.type !== "application/pdf") { setError("PDF 파일만 업로드할 수 있어요."); setStatus("error"); return; }
+    if (f.size > MAX_FILE_MB * 1024 * 1024) { setError(`파일이 너무 큽니다. ${MAX_FILE_MB}MB 이하의 PDF만 지원해요.`); setStatus("error"); return; }
+    setError(""); setResult(null); setFileName(f.name);
+    setProgress({ message: "PDF 읽는 중..." }); setStatus("processing");
+    const reader = new FileReader();
+    reader.onload = () => summarize(String(reader.result).split(",")[1], f.name);
+    reader.onerror = () => { setError("파일을 읽는 중 오류가 발생했어요."); setStatus("error"); };
+    reader.readAsDataURL(f);
+  };
+
+  const reset = () => {
+    abortRef.current?.abort();
+    setStatus("idle"); setResult(null); setError(""); setFileName("");
+    setCopied(false); setProgress({ message: "" });
+    setRevealed({}); setQuizResults({}); setShowWrongOnly(false); setQuizOrder([]);
+    setMemos({}); setEditingMemo(null); setCurrentHid(null);
+  };
+
+  const loadFromHistory = (item) => {
+    setFileName(item.fileName); setResult(item.result); setStatus("done");
+    setCopied(false); initQuiz(item.result?.quiz);
+    setMemos(item.memos || {}); setEditingMemo(null); setCurrentHid(item.id);
+  };
+
+  const removeHistory = async (e, id) => {
+    e.stopPropagation();
+    await dbDelete(id).catch(() => {});
+    setHistory((h) => h.filter((i) => i.id !== id));
+    if (currentHid === id) reset();
+  };
+
+  // ── export helpers ──
+  const buildMd = () => {
+    if (!result) return "";
+    const L = [];
+    L.push(`# ${result.title}\n`);
+    L.push(`> ${result.oneLineSummary}\n`);
+    L.push(`## 핵심 요약`);
+    (result.summary || []).forEach((s, i) => L.push(`${i + 1}. ${s}`));
+    L.push(`\n## 주요 개념`);
+    (result.concepts || []).forEach((c, i) => {
+      L.push(`**${c.term}**: ${c.explanation}`);
+      if (memos[`c${i}`]) L.push(`  > 메모: ${memos[`c${i}`]}`);
+    });
+    L.push(`\n## 암기 포인트`);
+    (result.keyPoints || []).forEach((k) => L.push(`- ${k}`));
+    L.push(`\n## 복습 퀴즈`);
+    (result.quiz || []).forEach((q, i) => L.push(`**Q${i + 1}. ${q.question}**\n> ${q.answer}\n`));
+    return L.join("\n");
+  };
+
+  const copyAll = () => {
+    navigator.clipboard.writeText(buildMd()).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1800); });
+  };
+
+  const downloadMd = () => {
+    const blob = new Blob([buildMd()], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${(result.title || fileName).replace(/[\\/:*?"<>|]/g, "_")}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const fmtDate = (ts) => new Date(ts).toLocaleDateString("ko-KR", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+
+  // ── quiz display ──
+  const orderedQuiz = quizOrder.length === (result?.quiz?.length || 0) && quizOrder.length > 0
+    ? quizOrder.map((i) => ({ q: result.quiz[i], i }))
+    : (result?.quiz || []).map((q, i) => ({ q, i }));
+  const displayedQuiz = showWrongOnly ? orderedQuiz.filter(({ i }) => quizResults[i] === "wrong") : orderedQuiz;
+  const wrongCnt   = Object.values(quizResults).filter((v) => v === "wrong").length;
+  const correctCnt = Object.values(quizResults).filter((v) => v === "correct").length;
+  const totalQ     = result?.quiz?.length || 0;
+  const allDone    = totalQ > 0 && Object.keys(quizResults).length === totalQ;
+
+  // ── shared button style ──
+  const btn = { border: `1px solid ${C.line}`, background: C.card, color: C.ink, padding: "8px 14px", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: "pointer" };
+  const btnSm = { ...btn, padding: "6px 11px", fontSize: 12 };
+
+  return (
+    <div style={{ fontFamily: sans, color: C.ink, minHeight: "100vh", background: `radial-gradient(circle at 18% 12%, ${C.paper2}, ${C.paper} 55%)` }}>
+      <div style={{ maxWidth: 780, margin: "0 auto", padding: "clamp(28px,5vw,56px) clamp(16px,4vw,24px) 90px" }}>
+
+        {/* Header */}
+        <header style={{ marginBottom: 40 }}>
+          <div className="no-print" style={{ fontSize: 12, letterSpacing: "0.32em", textTransform: "uppercase", color: C.accent, fontWeight: 600 }}>AI Study Assistant</div>
+          <h1 style={{ fontFamily: serif, fontSize: "clamp(32px,6vw,46px)", lineHeight: 1.1, margin: "10px 0 8px", fontWeight: 700 }}>코어노트</h1>
+          <p className="no-print" style={{ color: C.inkSoft, fontSize: 16, margin: 0, maxWidth: 520 }}>
+            PDF 강의 자료를 올리면, 핵심 요약부터 개념 정리·암기 포인트·복습 퀴즈까지 한 번에 만들어 드려요.
+          </p>
+        </header>
+
+        {/* ── Upload ── */}
+        {(status === "idle" || status === "error") && (
+          <div className="rise no-print">
+            <div
+              className="zone"
+              onClick={() => inputRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(e) => { e.preventDefault(); setDragging(false); handleFile(e.dataTransfer.files[0]); }}
+              style={{ border: `2px dashed ${dragging ? C.accent : C.line}`, background: dragging ? C.card : "transparent", borderRadius: 18, padding: "clamp(32px,5vw,56px) 28px", textAlign: "center", transition: "all .2s", cursor: "pointer" }}
+            >
+              <div style={{ width: 56, height: 56, borderRadius: 14, background: C.accentSoft, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 18px" }}>
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke={C.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 16V4M12 4l-4 4M12 4l4 4" /><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+                </svg>
+              </div>
+              <div style={{ fontFamily: serif, fontSize: 21, fontWeight: 700, marginBottom: 6 }}>PDF를 여기에 끌어다 놓으세요</div>
+              <div style={{ color: C.inkSoft, fontSize: 14 }}>또는 클릭해서 파일을 선택하세요 (최대 {MAX_FILE_MB}MB)</div>
+              <input ref={inputRef} type="file" accept="application/pdf" style={{ display: "none" }} onChange={(e) => handleFile(e.target.files[0])} />
+            </div>
+            {error && <div style={{ marginTop: 16, color: C.accent, fontSize: 14, textAlign: "center" }}>{error}</div>}
+
+            {/* History */}
+            {history.length > 0 && (
+              <div style={{ marginTop: 36 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.inkSoft, letterSpacing: "0.08em", marginBottom: 12 }}>최근 정리 기록</div>
+                <div style={{ display: "grid", gap: 8 }}>
+                  {history.map((item) => {
+                    const rev = reviewStatus(item);
+                    return (
+                      <div key={item.id} className="hist-item"
+                        onClick={() => loadFromHistory(item)}
+                        style={{ background: C.card, border: `1px solid ${rev?.urgent ? C.accent : C.line}`, borderRadius: 12, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}
+                      >
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                            <div style={{ fontWeight: 600, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</div>
+                            {rev && (
+                              <span style={{ fontSize: 11, fontWeight: 600, flexShrink: 0, color: rev.urgent ? C.accent : C.inkSoft, background: rev.urgent ? C.accentSoft : C.paper2, padding: "2px 7px", borderRadius: 4 }}>
+                                {rev.text}
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: 12, color: C.inkSoft, marginTop: 2 }}>{item.fileName} · {fmtDate(item.createdAt)}</div>
+                        </div>
+                        <button onClick={(e) => removeHistory(e, item.id)} style={{ border: "none", background: "transparent", color: C.inkSoft, fontSize: 20, lineHeight: 1, padding: "2px 6px", borderRadius: 6, flexShrink: 0, cursor: "pointer" }}>×</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Processing ── */}
+        {status === "processing" && (
+          <div className="rise no-print" style={{ textAlign: "center", padding: "64px 20px" }}>
+            <div className="spin" style={{ width: 44, height: 44, border: `3px solid ${C.accentSoft}`, borderTopColor: C.accent, borderRadius: "50%", margin: "0 auto 22px" }} />
+            <div style={{ fontFamily: serif, fontSize: 20, fontWeight: 700 }}>읽고 정리하는 중…</div>
+            <div style={{ color: C.inkSoft, fontSize: 14, marginTop: 6 }}>{progress.message || fileName}</div>
+            {progress.step === "map" && progress.total > 1 && (
+              <div style={{ maxWidth: 280, margin: "20px auto 0" }}>
+                <div style={{ background: C.line, borderRadius: 6, height: 6, overflow: "hidden" }}>
+                  <div style={{ background: C.accent, height: "100%", borderRadius: 6, width: `${((progress.current || 0) / progress.total) * 100}%`, transition: "width 0.4s ease" }} />
+                </div>
+                <div style={{ fontSize: 12, color: C.inkSoft, marginTop: 6 }}>{progress.current || 0} / {progress.total} 구간</div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Result ── */}
+        {status === "done" && result && (
+          <div className="rise">
+            {result._note && (
+              <div style={{ background: C.warn, color: C.warnText, border: "1px solid #fde68a", borderRadius: 10, padding: "10px 16px", fontSize: 13, marginBottom: 18 }}>
+                ⚠ {result._note}
+              </div>
+            )}
+
+            {/* Toolbar */}
+            <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 22, flexWrap: "wrap" }}>
+              <div style={{ fontSize: 13, color: C.inkSoft, display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                <span style={{ background: C.accentSoft, color: C.accent, fontWeight: 600, padding: "3px 9px", borderRadius: 6, fontSize: 12, flexShrink: 0 }}>PDF</span>
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fileName}</span>
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {currentHid && (
+                  <button onClick={markReviewed} style={{ ...btn, background: C.accentSoft, color: C.accent, borderColor: "#c97a52" }}>복습 완료</button>
+                )}
+                <button onClick={copyAll} style={btn}>{copied ? "복사됨 ✓" : "전체 복사"}</button>
+                <button onClick={downloadMd} style={btn}>MD 저장</button>
+                <button onClick={() => window.print()} style={btn}>인쇄</button>
+                <button onClick={reset} style={{ ...btn, border: "none", background: C.ink, color: C.paper }}>새 PDF</button>
+              </div>
+            </div>
+
+            <h2 style={{ fontFamily: serif, fontSize: "clamp(22px,4vw,32px)", fontWeight: 700, margin: "0 0 14px", lineHeight: 1.2 }}>{result.title}</h2>
+
+            {result.oneLineSummary && (
+              <div style={{ borderLeft: `4px solid ${C.accent}`, background: C.card, padding: "16px 20px", borderRadius: "0 12px 12px 0", fontSize: 17, fontFamily: serif, lineHeight: 1.55, marginBottom: 34 }}>
+                {result.oneLineSummary}
+              </div>
+            )}
+
+            {/* 핵심 요약 */}
+            <Section title="핵심 요약">
+              <ul style={{ margin: 0, paddingLeft: 0, listStyle: "none" }}>
+                {(result.summary || []).map((s, i) => (
+                  <li key={i} style={{ display: "flex", gap: 12, padding: "9px 0", lineHeight: 1.6 }}>
+                    <span style={{ color: C.accent, fontWeight: 700, flexShrink: 0 }}>{String(i + 1).padStart(2, "0")}</span>
+                    <span>{s}</span>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+
+            {/* 주요 개념 */}
+            <Section title="주요 개념">
+              <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))" }}>
+                {(result.concepts || []).map((c, i) => {
+                  const key = `c${i}`;
+                  return (
+                    <div key={i} style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 12, padding: "14px 18px" }}>
+                      <div style={{ fontFamily: serif, fontWeight: 700, fontSize: 16, marginBottom: 4 }}>{c.term}</div>
+                      <div style={{ color: C.inkSoft, fontSize: 14.5, lineHeight: 1.6 }}>{c.explanation}</div>
+
+                      {/* 메모 — 내용은 항상 표시, 편집 UI만 no-print */}
+                      {memos[key] && editingMemo !== key && (
+                        <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px dashed ${C.line}`, fontSize: 13, color: C.ink, lineHeight: 1.5 }}>
+                          {memos[key]}
+                        </div>
+                      )}
+                      {editingMemo === key ? (
+                        <textarea
+                          className="no-print"
+                          autoFocus
+                          defaultValue={memos[key] || ""}
+                          onBlur={(e) => handleMemoBlur(key, e.target.value)}
+                          placeholder="내 메모..."
+                          style={{ marginTop: 10, width: "100%", minHeight: 56, resize: "vertical", border: `1px solid ${C.line}`, borderRadius: 8, padding: "7px 10px", fontSize: 13, fontFamily: sans, background: "#fffdf7", color: C.ink, boxSizing: "border-box" }}
+                        />
+                      ) : (
+                        <div
+                          className="no-print"
+                          onClick={() => setEditingMemo(key)}
+                          style={{ marginTop: 8, fontSize: 12, color: C.accent, cursor: "pointer", fontStyle: "italic" }}
+                        >
+                          {memos[key] ? "✏ 수정" : "+ 메모 추가"}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </Section>
+
+            {/* 암기 포인트 */}
+            <Section title="암기 포인트">
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+                {(result.keyPoints || []).map((k, i) => (
+                  <div key={i} style={{ background: C.accentSoft, color: "#7a3417", borderRadius: 10, padding: "10px 14px", fontSize: 14, lineHeight: 1.5, flex: "1 1 220px" }}>
+                    {k}
+                  </div>
+                ))}
+              </div>
+            </Section>
+
+            {/* 복습 퀴즈 */}
+            <Section title="복습 퀴즈">
+              {/* 퀴즈 컨트롤 */}
+              <div className="no-print" style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
+                <button onClick={shuffleQuiz} style={btnSm}>셔플</button>
+                {wrongCnt > 0 && (
+                  <button
+                    onClick={() => setShowWrongOnly((v) => !v)}
+                    style={{ ...btnSm, background: showWrongOnly ? C.red : C.card, color: showWrongOnly ? C.redText : C.ink, borderColor: showWrongOnly ? C.redBorder : C.line }}
+                  >
+                    오답만 보기 ({wrongCnt})
+                  </button>
+                )}
+                {Object.keys(quizResults).length > 0 && (
+                  <>
+                    <span style={{ fontSize: 12, color: C.inkSoft }}>
+                      ✓ {correctCnt} · ✗ {wrongCnt} · ? {totalQ - Object.keys(quizResults).length}
+                    </span>
+                    <button onClick={resetQuiz} style={{ ...btnSm, marginLeft: "auto" }}>초기화</button>
+                  </>
+                )}
+              </div>
+
+              {/* 전체 평가 완료 요약 */}
+              {allDone && (
+                <div style={{ background: wrongCnt === 0 ? C.green : C.warn, border: `1px solid ${wrongCnt === 0 ? C.greenBorder : "#fde68a"}`, borderRadius: 10, padding: "10px 16px", fontSize: 13, marginBottom: 14, color: wrongCnt === 0 ? C.greenText : C.warnText }}>
+                  {wrongCnt === 0
+                    ? "완벽해요! 모든 문제를 맞혔습니다 🎉"
+                    : `${totalQ}문제 중 ${correctCnt}개 정답 · 오답 ${wrongCnt}개를 다시 복습하세요.`}
+                </div>
+              )}
+
+              {displayedQuiz.length === 0 && showWrongOnly && (
+                <div style={{ color: C.inkSoft, fontSize: 14, textAlign: "center", padding: "24px 0" }}>오답이 없습니다!</div>
+              )}
+
+              <div style={{ display: "grid", gap: 10 }}>
+                {displayedQuiz.map(({ q, i }) => {
+                  const ev = quizResults[i];
+                  return (
+                    <div key={i} style={{ background: ev === "correct" ? C.green : ev === "wrong" ? C.red : C.card, border: `1px solid ${ev === "correct" ? C.greenBorder : ev === "wrong" ? C.redBorder : C.line}`, borderRadius: 12, padding: "15px 18px", transition: "background .2s, border-color .2s" }}>
+                      <div
+                        className="qcard"
+                        style={{ display: "flex", gap: 10, fontWeight: 600, fontSize: 15, lineHeight: 1.5, cursor: "pointer" }}
+                        onClick={() => setRevealed((r) => ({ ...r, [i]: !r[i] }))}
+                      >
+                        <span style={{ color: C.accent, flexShrink: 0 }}>Q{i + 1}.</span>
+                        <span>{q.question}</span>
+                      </div>
+
+                      {revealed[i] ? (
+                        <>
+                          <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${C.line}`, color: C.inkSoft, fontSize: 14.5, lineHeight: 1.6 }}>
+                            {q.answer}
+                          </div>
+                          {/* 자기 평가 버튼 */}
+                          {!ev && (
+                            <div className="no-print" style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                              <button
+                                onClick={() => setQuizResults((r) => ({ ...r, [i]: "correct" }))}
+                                style={{ flex: 1, padding: "8px", borderRadius: 8, border: `1px solid ${C.greenBorder}`, background: C.green, color: C.greenText, fontWeight: 600, fontSize: 13, cursor: "pointer" }}
+                              >
+                                알았어 ✓
+                              </button>
+                              <button
+                                onClick={() => setQuizResults((r) => ({ ...r, [i]: "wrong" }))}
+                                style={{ flex: 1, padding: "8px", borderRadius: 8, border: `1px solid ${C.redBorder}`, background: C.red, color: C.redText, fontWeight: 600, fontSize: 13, cursor: "pointer" }}
+                              >
+                                몰랐어 ✗
+                              </button>
+                            </div>
+                          )}
+                          {ev === "correct" && (
+                            <div className="no-print" style={{ marginTop: 8, fontSize: 12, color: C.greenText, fontWeight: 600 }}>✓ 알고 있었어요!</div>
+                          )}
+                          {ev === "wrong" && (
+                            <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+                              <span style={{ fontSize: 12, color: C.redText, fontWeight: 600 }}>✗ 다시 복습하세요</span>
+                              <button
+                                onClick={() => setQuizResults((r) => { const n = { ...r }; delete n[i]; return n; })}
+                                style={{ fontSize: 11, color: C.inkSoft, background: "transparent", border: "none", textDecoration: "underline", cursor: "pointer" }}
+                              >
+                                취소
+                              </button>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div
+                          className="no-print"
+                          style={{ marginTop: 8, fontSize: 12.5, color: C.accent, cursor: "pointer" }}
+                          onClick={() => setRevealed((r) => ({ ...r, [i]: true }))}
+                        >
+                          탭하면 정답 보기
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </Section>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Section({ title, children }) {
+  return (
+    <section style={{ marginBottom: 34 }}>
+      <h3 style={{ fontFamily: serif, fontSize: 19, fontWeight: 700, margin: "0 0 14px", display: "flex", alignItems: "center", gap: 10 }}>
+        <span style={{ width: 6, height: 18, background: C.accent, borderRadius: 3, display: "inline-block" }} />
+        {title}
+      </h3>
+      {children}
+    </section>
+  );
+}
