@@ -130,6 +130,7 @@ export default function App() {
   const [quizResults, setQuizResults]     = useState({});
   const [showWrongOnly, setShowWrongOnly] = useState(false);
   const [quizOrder, setQuizOrder]         = useState([]);
+  const [mcSelected, setMcSelected]       = useState({});
 
   // 메모
   const [memos, setMemos]             = useState({});
@@ -225,9 +226,33 @@ export default function App() {
     setQuizResults({});
     setShowWrongOnly(false);
     setRevealed({});
+    setMcSelected({});
   };
-  const shuffleQuiz = () => { setQuizOrder(fisherYates((result.quiz || []).map((_, i) => i))); setRevealed({}); };
-  const resetQuiz = () => initQuiz(result?.quiz);
+  const shuffleQuiz = () => { setQuizOrder(fisherYates((result.quiz || []).map((_, i) => i))); setRevealed({}); setMcSelected({}); };
+  const resetQuiz = () => {
+    initQuiz(result?.quiz);
+    if (currentHid) dbUpdate(currentHid, { quizResults: {}, mcSelected: {} }).catch(() => {});
+  };
+
+  // 퀴즈 결과 변경 + DB 저장
+  const markQuiz = (i, val) => {
+    const next = { ...quizResults, [i]: val };
+    setQuizResults(next);
+    if (currentHid) dbUpdate(currentHid, { quizResults: next, mcSelected }).catch(() => {});
+  };
+  const unmarkQuiz = (i) => {
+    const next = { ...quizResults };
+    delete next[i];
+    setQuizResults(next);
+    if (currentHid) dbUpdate(currentHid, { quizResults: next, mcSelected }).catch(() => {});
+  };
+  const pickMc = (i, oi, isCorrect) => {
+    const nextMc  = { ...mcSelected, [i]: oi };
+    const nextRes = { ...quizResults, [i]: isCorrect ? "correct" : "wrong" };
+    setMcSelected(nextMc);
+    setQuizResults(nextRes);
+    if (currentHid) dbUpdate(currentHid, { quizResults: nextRes, mcSelected: nextMc }).catch(() => {});
+  };
 
   // ── 메모 helpers ──
   const handleMemoBlur = (key, value) => {
@@ -294,6 +319,8 @@ export default function App() {
               title: ev.result.title || name,
               result: ev.result,
               memos: {},
+              quizResults: {},
+              mcSelected: {},
               nextReview: Date.now() + 86400000,
               reviewCount: 0,
             }).then(async (newId) => {
@@ -327,13 +354,20 @@ export default function App() {
     abortRef.current?.abort();
     setStatus("idle"); setResult(null); setError(""); setFileName("");
     setCopied(false); setProgress({ message: "" });
-    setRevealed({}); setQuizResults({}); setShowWrongOnly(false); setQuizOrder([]);
+    setRevealed({}); setQuizResults({}); setShowWrongOnly(false); setQuizOrder([]); setMcSelected({});
     setMemos({}); setEditingMemo(null); setCurrentHid(null);
   };
 
   const loadFromHistory = (item) => {
     setFileName(item.fileName); setResult(item.result); setStatus("done");
-    setCopied(false); initQuiz(item.result?.quiz);
+    setCopied(false);
+    const savedResults = item.quizResults || {};
+    const savedMc     = item.mcSelected  || {};
+    setQuizOrder((item.result?.quiz || []).map((_, i) => i));
+    setQuizResults(savedResults);
+    setMcSelected(savedMc);
+    setRevealed(Object.fromEntries(Object.keys(savedResults).map((k) => [k, true])));
+    setShowWrongOnly(false);
     setMemos(item.memos || {}); setEditingMemo(null);
     setCurrentHid(item.id); setSelectedDir(item.directory || DEFAULT_DIR);
   };
@@ -361,7 +395,16 @@ export default function App() {
     L.push(`\n## 암기 포인트`);
     (result.keyPoints || []).forEach((k) => L.push(`- ${k}`));
     L.push(`\n## 복습 퀴즈`);
-    (result.quiz || []).forEach((q, i) => L.push(`**Q${i + 1}. ${q.question}**\n> ${q.answer}\n`));
+    (result.quiz || []).forEach((q, i) => {
+      if (q.type === "mc") {
+        L.push(`**Q${i + 1}. [4지선다] ${q.question}**`);
+        (q.options || []).forEach((opt, oi) => L.push(`  ${String.fromCharCode(65 + oi)}. ${opt}${oi === q.correct ? " ✓" : ""}`));
+        if (q.answer) L.push(`  > ${q.answer}`);
+        L.push("");
+      } else {
+        L.push(`**Q${i + 1}. ${q.question}**\n> ${q.answer}\n`);
+      }
+    });
     return L.join("\n");
   };
 
@@ -563,12 +606,20 @@ export default function App() {
               </div>
             )}
 
-            <button
-              onClick={() => setPage("monitor")}
-              style={{ marginTop: 22, border: `1px solid ${C.line}`, background: C.card, color: C.inkSoft, padding: "7px 16px", borderRadius: 9, fontSize: 13, cursor: "pointer" }}
-            >
-              📊 실시간 통계 보기 →
-            </button>
+            <div style={{ marginTop: 22, display: "flex", gap: 10, justifyContent: "center" }}>
+              <button
+                onClick={() => setPage("monitor")}
+                style={{ border: `1px solid ${C.line}`, background: C.card, color: C.inkSoft, padding: "7px 16px", borderRadius: 9, fontSize: 13, cursor: "pointer" }}
+              >
+                📊 실시간 통계 보기 →
+              </button>
+              <button
+                onClick={reset}
+                style={{ border: `1px solid ${C.line}`, background: C.card, color: C.accent, padding: "7px 16px", borderRadius: 9, fontSize: 13, cursor: "pointer" }}
+              >
+                취소
+              </button>
+            </div>
           </div>
         )}
 
@@ -681,29 +732,75 @@ export default function App() {
                   const ev = quizResults[i];
                   return (
                     <div key={i} style={{ background: ev === "correct" ? C.green : ev === "wrong" ? C.red : C.card, border: `1px solid ${ev === "correct" ? C.greenBorder : ev === "wrong" ? C.redBorder : C.line}`, borderRadius: 12, padding: "15px 18px", transition: "background .2s, border-color .2s" }}>
-                      <div className="qcard" style={{ display: "flex", gap: 10, fontWeight: 600, fontSize: 15, lineHeight: 1.5, cursor: "pointer" }} onClick={() => setRevealed((r) => ({ ...r, [i]: !r[i] }))}>
-                        <span style={{ color: C.accent, flexShrink: 0 }}>Q{i + 1}.</span>
-                        <span>{q.question}</span>
+
+                      {/* 질문 + 유형 뱃지 */}
+                      <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                        <span style={{ color: C.accent, fontWeight: 700, fontSize: 15, flexShrink: 0, lineHeight: 1.5 }}>Q{i + 1}.</span>
+                        <div style={{ flex: 1 }}>
+                          <span style={{ fontWeight: 600, fontSize: 15, lineHeight: 1.5 }}>{q.question}</span>
+                          <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 4, background: q.type === "mc" ? C.accentSoft : C.paper2, color: q.type === "mc" ? C.accent : C.inkSoft, verticalAlign: "middle", whiteSpace: "nowrap" }}>
+                            {q.type === "mc" ? "4지선다" : "주관식"}
+                          </span>
+                        </div>
                       </div>
-                      {revealed[i] ? (
+
+                      {q.type === "mc" ? (
+                        /* ── 4지선다 ── */
                         <>
-                          <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${C.line}`, color: C.inkSoft, fontSize: 14.5, lineHeight: 1.6 }}>{q.answer}</div>
-                          {!ev && (
-                            <div className="no-print" style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                              <button onClick={() => setQuizResults((r) => ({ ...r, [i]: "correct" }))} style={{ flex: 1, padding: "8px", borderRadius: 8, border: `1px solid ${C.greenBorder}`, background: C.green, color: C.greenText, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>알았어 ✓</button>
-                              <button onClick={() => setQuizResults((r) => ({ ...r, [i]: "wrong" }))} style={{ flex: 1, padding: "8px", borderRadius: 8, border: `1px solid ${C.redBorder}`, background: C.red, color: C.redText, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>몰랐어 ✗</button>
-                            </div>
-                          )}
-                          {ev === "correct" && <div className="no-print" style={{ marginTop: 8, fontSize: 12, color: C.greenText, fontWeight: 600 }}>✓ 알고 있었어요!</div>}
-                          {ev === "wrong" && (
-                            <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
-                              <span style={{ fontSize: 12, color: C.redText, fontWeight: 600 }}>✗ 다시 복습하세요</span>
-                              <button onClick={() => setQuizResults((r) => { const n = { ...r }; delete n[i]; return n; })} style={{ fontSize: 11, color: C.inkSoft, background: "transparent", border: "none", textDecoration: "underline", cursor: "pointer" }}>취소</button>
-                            </div>
+                          <div className="no-print" style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                            {(q.options || []).map((opt, oi) => {
+                              const selected = mcSelected[i] === oi;
+                              const isCorrect = oi === q.correct;
+                              const answered = mcSelected[i] !== undefined;
+                              let bg = C.paper2, border = C.line, color = C.ink;
+                              if (answered) {
+                                if (isCorrect)        { bg = C.green; border = C.greenBorder; color = C.greenText; }
+                                else if (selected)    { bg = C.red;   border = C.redBorder;   color = C.redText; }
+                                else                  { bg = C.paper; color = C.inkSoft; }
+                              }
+                              return (
+                                <button
+                                  key={oi}
+                                  disabled={answered}
+                                  onClick={() => pickMc(i, oi, isCorrect)}
+                                  style={{ background: bg, border: `1px solid ${border}`, color, borderRadius: 9, padding: "9px 12px", fontSize: 13.5, cursor: answered ? "default" : "pointer", textAlign: "left", lineHeight: 1.4, transition: "background .15s, border-color .15s", fontFamily: sans }}
+                                >
+                                  <span style={{ fontWeight: 700, marginRight: 5, opacity: 0.65 }}>{String.fromCharCode(65 + oi)}.</span>
+                                  {opt}
+                                  {answered && isCorrect && <span style={{ marginLeft: 5 }}>✓</span>}
+                                  {answered && selected && !isCorrect && <span style={{ marginLeft: 5 }}>✗</span>}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {mcSelected[i] !== undefined && q.answer && (
+                            <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px dashed ${C.line}`, color: C.inkSoft, fontSize: 14, lineHeight: 1.6 }}>{q.answer}</div>
                           )}
                         </>
                       ) : (
-                        <div className="no-print" style={{ marginTop: 8, fontSize: 12.5, color: C.accent, cursor: "pointer" }} onClick={() => setRevealed((r) => ({ ...r, [i]: true }))}>탭하면 정답 보기</div>
+                        /* ── 주관식 ── */
+                        <>
+                          {revealed[i] ? (
+                            <>
+                              <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${C.line}`, color: C.inkSoft, fontSize: 14.5, lineHeight: 1.6 }}>{q.answer}</div>
+                              {!ev && (
+                                <div className="no-print" style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                                  <button onClick={() => markQuiz(i, "correct")} style={{ flex: 1, padding: "8px", borderRadius: 8, border: `1px solid ${C.greenBorder}`, background: C.green, color: C.greenText, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>알았어 ✓</button>
+                                  <button onClick={() => markQuiz(i, "wrong")} style={{ flex: 1, padding: "8px", borderRadius: 8, border: `1px solid ${C.redBorder}`, background: C.red, color: C.redText, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>몰랐어 ✗</button>
+                                </div>
+                              )}
+                              {ev === "correct" && <div className="no-print" style={{ marginTop: 8, fontSize: 12, color: C.greenText, fontWeight: 600 }}>✓ 알고 있었어요!</div>}
+                              {ev === "wrong" && (
+                                <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+                                  <span style={{ fontSize: 12, color: C.redText, fontWeight: 600 }}>✗ 다시 복습하세요</span>
+                                  <button onClick={() => unmarkQuiz(i)} style={{ fontSize: 11, color: C.inkSoft, background: "transparent", border: "none", textDecoration: "underline", cursor: "pointer" }}>취소</button>
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <div className="no-print" style={{ marginTop: 8, fontSize: 12.5, color: C.accent, cursor: "pointer" }} onClick={() => setRevealed((r) => ({ ...r, [i]: true }))}>탭하면 정답 보기</div>
+                          )}
+                        </>
                       )}
                     </div>
                   );

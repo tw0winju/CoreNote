@@ -106,7 +106,17 @@ function normalizeResult(parsed) {
     summary: Array.isArray(parsed.summary) ? parsed.summary.filter((s) => typeof s === "string") : [],
     concepts: Array.isArray(parsed.concepts) ? parsed.concepts.filter((c) => c && typeof c.term === "string") : [],
     keyPoints: Array.isArray(parsed.keyPoints) ? parsed.keyPoints.filter((k) => typeof k === "string") : [],
-    quiz: Array.isArray(parsed.quiz) ? parsed.quiz.filter((q) => q && typeof q.question === "string") : [],
+    quiz: Array.isArray(parsed.quiz) ? parsed.quiz.reduce((acc, q) => {
+      if (!q || typeof q.question !== "string") return acc;
+      if (q.type === "mc") {
+        if (!Array.isArray(q.options) || q.options.length < 4 || typeof q.correct !== "number") return acc;
+        acc.push({ type: "mc", question: q.question, options: q.options.slice(0, 4).map(String), correct: Math.min(3, Math.max(0, Math.round(q.correct))), answer: typeof q.answer === "string" ? q.answer : "" });
+      } else {
+        if (typeof q.answer !== "string") return acc;
+        acc.push({ type: "open", question: q.question, answer: q.answer });
+      }
+      return acc;
+    }, []) : [],
   };
 }
 
@@ -120,11 +130,17 @@ const FINAL_PROMPT = `아래 학습 자료를 학생이 빠르게 이해·복습
   "summary": ["핵심 요약 포인트", "..."],
   "concepts": [{"term": "핵심 용어/개념", "explanation": "이해하기 쉬운 설명"}],
   "keyPoints": ["시험·복습에 중요한 암기 포인트", "..."],
-  "quiz": [{"question": "복습용 질문", "answer": "정답과 간단한 해설"}]
+  "quiz": [
+    {"type":"open","question":"주관식 질문","answer":"정답과 해설"},
+    {"type":"mc","question":"객관식 질문","options":["보기1","보기2","보기3","보기4"],"correct":0,"answer":"왜 이 선택지가 정답인지 설명"}
+  ]
 }
 
 규칙:
-- summary 4~7개, concepts 3~8개, keyPoints 3~6개, quiz 3~5개.
+- summary 4~7개, concepts 3~8개, keyPoints 3~6개.
+- quiz는 4~6개. open(주관식) 2개 + mc(4지선다) 2~4개를 섞어서 출제한다.
+- mc의 correct는 정답 선택지의 0-based 인덱스(0~3). options는 반드시 정확히 4개.
+- mc의 options에는 매력적인 오답(그럴듯하지만 틀린 선택지)을 포함해 변별력을 높인다.
 - 모든 설명은 한국어로 작성(전문 용어는 원어 병기 가능).
 - 자료에 실제로 있는 내용에만 근거하고 지어내지 않는다.
 - 각 항목은 구체적으로 작성하고, 항목 간 중복 없이 핵심만 담는다.
