@@ -49,7 +49,7 @@ function chunkText(text, maxChars) {
   return chunks;
 }
 
-// 재시도 포함 Ollama 호출. 네트워크·HTTP 오류는 최대 retries회 재시도.
+// 재시도 포함 Ollama 호출. { content, tokensPerSec } 반환.
 async function ollamaChat(messages, { json = false, retries = 2 } = {}) {
   let lastErr;
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -74,7 +74,10 @@ async function ollamaChat(messages, { json = false, retries = 2 } = {}) {
         throw new Error(`OLLAMA_HTTP_${res.status}`);
       }
       const data = await res.json();
-      return data.message?.content ?? "";
+      const evalCount = data.eval_count ?? 0;
+      const evalDuration = data.eval_duration ?? 0; // nanoseconds
+      const tokensPerSec = evalDuration > 0 ? Math.round(evalCount / (evalDuration / 1e9)) : 0;
+      return { content: data.message?.content ?? "", tokensPerSec };
     } catch (e) {
       if (e.fatal) throw e;
       const code = e?.cause?.code || e?.code || "";
@@ -177,7 +180,7 @@ app.post("/api/summarize", async (req, res) => {
 
     let sourceForFinal;
     if (chunks.length === 1) {
-      send({ type: "progress", step: "map", current: 1, total: 1, message: "내용 분석 중..." });
+      send({ type: "progress", step: "map", current: 0, total: 1, message: "내용 분석 중..." });
       sourceForFinal = chunks[0];
     } else {
       send({ type: "progress", step: "map", current: 0, total: chunks.length, message: `문서를 ${chunks.length}개 구간으로 나눠 분석합니다...` });
@@ -192,10 +195,10 @@ app.post("/api/summarize", async (req, res) => {
               role: "user",
               content: `다음은 문서의 ${i + 1}/${chunks.length} 부분입니다. 핵심 내용을 한국어 불릿(- )으로 빠짐없이 정리하세요. 정리 외 잡담은 하지 마세요.\n\n${chunk}`,
             },
-          ]).then((out) => {
+          ]).then(({ content, tokensPerSec }) => {
             completed++;
-            send({ type: "progress", step: "map", current: completed, total: chunks.length, message: `구간 ${completed}/${chunks.length} 분석 완료` });
-            return clean(out);
+            send({ type: "progress", step: "map", current: completed, total: chunks.length, message: `구간 ${completed}/${chunks.length} 분석 완료`, tokensPerSec });
+            return clean(content);
           })
         )
       );
@@ -203,7 +206,7 @@ app.post("/api/summarize", async (req, res) => {
     }
 
     send({ type: "progress", step: "reduce", message: "최종 정리 중..." });
-    const raw = await ollamaChat(
+    const { content: raw } = await ollamaChat(
       [
         { role: "system", content: "당신은 학생의 학습을 돕는 전문 튜터입니다. 항상 유효한 JSON만 출력합니다." },
         { role: "user", content: `${FINAL_PROMPT}\n\n[정리 대상]\n${sourceForFinal}` },
@@ -232,6 +235,18 @@ app.post("/api/summarize", async (req, res) => {
     else
       send({ type: "error", message: "요약 처리 중 오류가 발생했습니다." });
     res.end();
+  }
+});
+
+// 리소스 통계 — Ollama /api/ps 프록시 (현재 로드된 모델 + VRAM 사용량)
+app.get("/api/stats", async (_req, res) => {
+  try {
+    const r = await fetch(`${OLLAMA_URL}/api/ps`);
+    if (!r.ok) return res.json({ ok: false, models: [] });
+    const data = await r.json();
+    res.json({ ok: true, models: data.models || [] });
+  } catch {
+    res.json({ ok: false, models: [] });
   }
 });
 

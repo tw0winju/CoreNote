@@ -23,9 +23,9 @@ const serif = "'Gowun Batang', serif";
 
 // ── IndexedDB ──────────────────────────────────────────────────────
 const DB_NAME = "corenote";
-const DB_VER = 1;
+const DB_VER = 2;
 const STORE = "history";
-const MAX_HISTORY = 20;
+const MAX_HISTORY = 100;
 const REVIEW_DAYS = [1, 3, 7, 14, 30];
 
 function openDB() {
@@ -51,11 +51,6 @@ async function dbSave(item) {
     const addReq = store.add({ ...item, createdAt: Date.now() });
     let newId = null;
     addReq.onsuccess = () => { newId = addReq.result; };
-    store.index("createdAt").getAll().onsuccess = (e) => {
-      const all = e.target.result;
-      if (all.length > MAX_HISTORY)
-        all.slice(0, all.length - MAX_HISTORY).forEach((r) => store.delete(r.id));
-    };
     tx.oncomplete = () => resolve(newId);
     tx.onerror = () => reject(tx.error);
   });
@@ -94,6 +89,7 @@ async function dbUpdate(id, updates) {
 
 // ── Utils ──────────────────────────────────────────────────────────
 const MAX_FILE_MB = 50;
+const DEFAULT_DIR = "기본";
 
 function fisherYates(arr) {
   const a = [...arr];
@@ -114,61 +110,134 @@ function reviewStatus(item) {
 
 // ── App ────────────────────────────────────────────────────────────
 export default function App() {
-  const [status, setStatus]       = useState("idle");
-  const [fileName, setFileName]   = useState("");
-  const [result, setResult]       = useState(null);
-  const [error, setError]         = useState("");
-  const [dragging, setDragging]   = useState(false);
-  const [copied, setCopied]       = useState(false);
-  const [progress, setProgress]   = useState({ message: "" });
-  const [history, setHistory]     = useState([]);
+  const [status, setStatus]     = useState("idle");
+  const [fileName, setFileName] = useState("");
+  const [result, setResult]     = useState(null);
+  const [error, setError]       = useState("");
+  const [dragging, setDragging] = useState(false);
+  const [copied, setCopied]     = useState(false);
+  const [progress, setProgress] = useState({ message: "" });
+  const [history, setHistory]   = useState([]);
 
-  // quiz
-  const [revealed, setRevealed]         = useState({});
-  const [quizResults, setQuizResults]   = useState({});
+  // 폴더
+  const [selectedDir, setSelectedDir]   = useState(DEFAULT_DIR);
+  const [newDirName, setNewDirName]     = useState("");
+  const [addingDir, setAddingDir]       = useState(false);
+  const [collapsed, setCollapsed]       = useState({});
+
+  // 퀴즈
+  const [revealed, setRevealed]           = useState({});
+  const [quizResults, setQuizResults]     = useState({});
   const [showWrongOnly, setShowWrongOnly] = useState(false);
-  const [quizOrder, setQuizOrder]       = useState([]);
+  const [quizOrder, setQuizOrder]         = useState([]);
 
-  // memo
-  const [memos, setMemos]               = useState({});
-  const [editingMemo, setEditingMemo]   = useState(null);
+  // 메모
+  const [memos, setMemos]             = useState({});
+  const [editingMemo, setEditingMemo] = useState(null);
 
-  // history tracking
-  const [currentHid, setCurrentHid]     = useState(null);
+  // 히스토리 추적
+  const [currentHid, setCurrentHid] = useState(null);
 
-  const inputRef = useRef(null);
-  const abortRef = useRef(null);
+  // 페이지
+  const [page, setPage]           = useState("main"); // "main" | "monitor"
+
+  // 리소스 모니터
+  const [liveStats, setLiveStats] = useState({ tokensPerSec: 0, vramBytes: 0, vramTotal: 0, modelName: null, expiresAt: null });
+  const [elapsed, setElapsed]     = useState(0);
+  const [eta, setEta]             = useState(null);
+  const [ollamaOk, setOllamaOk]   = useState(null);
+  const [statsUpdatedAt, setStatsUpdatedAt] = useState(null);
+
+  const inputRef    = useRef(null);
+  const abortRef    = useRef(null);
+  const newDirRef   = useRef(null);
+  const startTimeRef = useRef(null);
 
   useEffect(() => { dbLoad().then(setHistory).catch(() => {}); }, []);
 
-  // ── quiz helpers ──
+  // Ollama 상태 폴링 (idle 화면 뱃지용)
+  useEffect(() => {
+    const check = async () => {
+      try {
+        const r = await fetch("/api/health").then((res) => res.json());
+        setOllamaOk(r.ollama && r.modelInstalled);
+      } catch { setOllamaOk(false); }
+    };
+    check();
+    const id = setInterval(check, 15000);
+    return () => clearInterval(id);
+  }, []);
+
+  // 경과 시간 타이머 (처리 중에만)
+  useEffect(() => {
+    if (status !== "processing") { setElapsed(0); setEta(null); return; }
+    const id = setInterval(() => {
+      if (startTimeRef.current) setElapsed(Math.floor((Date.now() - startTimeRef.current) / 1000));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [status]);
+
+  // VRAM 폴링 (처리 중 또는 모니터 페이지에서)
+  useEffect(() => {
+    if (status !== "processing" && page !== "monitor") return;
+    const interval = page === "monitor" ? 2000 : 3000;
+    const poll = async () => {
+      try {
+        const r = await fetch("/api/stats").then((res) => res.json());
+        if (r.ok && r.models?.length) {
+          const m = r.models[0];
+          setLiveStats((prev) => ({ ...prev, vramBytes: m.size_vram || 0, vramTotal: m.size || 0, modelName: m.name || null, expiresAt: m.expires_at || null }));
+        } else {
+          setLiveStats((prev) => ({ ...prev, vramBytes: 0, vramTotal: 0, modelName: null, expiresAt: null }));
+        }
+        setStatsUpdatedAt(Date.now());
+      } catch {}
+    };
+    poll();
+    const id = setInterval(poll, interval);
+    return () => clearInterval(id);
+  }, [status, page]);
+
+  // 폴더 목록 (히스토리에서 추출)
+  const directories = [...new Set(history.map((h) => h.directory || DEFAULT_DIR))].sort((a, b) =>
+    a === DEFAULT_DIR ? -1 : b === DEFAULT_DIR ? 1 : a.localeCompare(b, "ko")
+  );
+
+  // 폴더별 그룹
+  const grouped = directories.reduce((acc, dir) => {
+    acc[dir] = history.filter((h) => (h.directory || DEFAULT_DIR) === dir);
+    return acc;
+  }, {});
+
+  const toggleCollapse = (dir) => setCollapsed((c) => ({ ...c, [dir]: !c[dir] }));
+
+  const confirmNewDir = () => {
+    const name = newDirName.trim();
+    if (!name) return;
+    setSelectedDir(name);
+    setNewDirName("");
+    setAddingDir(false);
+  };
+
+  // ── 퀴즈 helpers ──
   const initQuiz = (quiz) => {
     setQuizOrder((quiz || []).map((_, i) => i));
     setQuizResults({});
     setShowWrongOnly(false);
     setRevealed({});
   };
-
-  const shuffleQuiz = () => {
-    setQuizOrder(fisherYates((result.quiz || []).map((_, i) => i)));
-    setRevealed({});
-  };
-
+  const shuffleQuiz = () => { setQuizOrder(fisherYates((result.quiz || []).map((_, i) => i))); setRevealed({}); };
   const resetQuiz = () => initQuiz(result?.quiz);
 
-  // ── memo helpers ──
-  const saveMemos = (m) => {
-    if (currentHid) dbUpdate(currentHid, { memos: m }).catch(() => {});
-  };
-
+  // ── 메모 helpers ──
   const handleMemoBlur = (key, value) => {
     setEditingMemo(null);
     const next = { ...memos, [key]: value };
     setMemos(next);
-    saveMemos(next);
+    if (currentHid) dbUpdate(currentHid, { memos: next }).catch(() => {});
   };
 
-  // ── spaced repetition ──
+  // ── 간격 반복 ──
   const markReviewed = async () => {
     if (!currentHid) return;
     const item = history.find((h) => h.id === currentHid);
@@ -178,10 +247,12 @@ export default function App() {
     setHistory(await dbLoad().catch(() => history));
   };
 
-  // ── SSE summarize ──
+  // ── SSE 요약 ──
   const summarize = async (base64, name) => {
     const ctrl = new AbortController();
     abortRef.current = ctrl;
+    startTimeRef.current = Date.now();
+    setLiveStats({ tokensPerSec: 0, vramBytes: 0, vramTotal: 0 });
     try {
       const res = await fetch("/api/summarize", {
         method: "POST",
@@ -202,7 +273,15 @@ export default function App() {
           if (!part.startsWith("data: ")) continue;
           let ev;
           try { ev = JSON.parse(part.slice(6)); } catch { continue; }
-          if (ev.type === "progress") setProgress(ev);
+          if (ev.type === "progress") {
+            setProgress(ev);
+            if (ev.tokensPerSec > 0) setLiveStats((prev) => ({ ...prev, tokensPerSec: ev.tokensPerSec }));
+            if (ev.step === "map" && ev.current > 0 && ev.total > 1 && startTimeRef.current) {
+              const ms = Date.now() - startTimeRef.current;
+              const avgMs = ms / ev.current;
+              setEta(avgMs * (ev.total - ev.current + 1));
+            }
+          }
           if (ev.type === "done") {
             setResult(ev.result);
             setStatus("done");
@@ -210,6 +289,7 @@ export default function App() {
             setMemos({});
             setCurrentHid(null);
             dbSave({
+              directory: selectedDir,
               fileName: name,
               title: ev.result.title || name,
               result: ev.result,
@@ -234,7 +314,7 @@ export default function App() {
   const handleFile = (f) => {
     if (!f) return;
     if (f.type !== "application/pdf") { setError("PDF 파일만 업로드할 수 있어요."); setStatus("error"); return; }
-    if (f.size > MAX_FILE_MB * 1024 * 1024) { setError(`파일이 너무 큽니다. ${MAX_FILE_MB}MB 이하의 PDF만 지원해요.`); setStatus("error"); return; }
+    if (f.size > MAX_FILE_MB * 1024 * 1024) { setError(`파일이 너무 큽니다. ${MAX_FILE_MB}MB 이하만 지원해요.`); setStatus("error"); return; }
     setError(""); setResult(null); setFileName(f.name);
     setProgress({ message: "PDF 읽는 중..." }); setStatus("processing");
     const reader = new FileReader();
@@ -254,7 +334,8 @@ export default function App() {
   const loadFromHistory = (item) => {
     setFileName(item.fileName); setResult(item.result); setStatus("done");
     setCopied(false); initQuiz(item.result?.quiz);
-    setMemos(item.memos || {}); setEditingMemo(null); setCurrentHid(item.id);
+    setMemos(item.memos || {}); setEditingMemo(null);
+    setCurrentHid(item.id); setSelectedDir(item.directory || DEFAULT_DIR);
   };
 
   const removeHistory = async (e, id) => {
@@ -264,7 +345,7 @@ export default function App() {
     if (currentHid === id) reset();
   };
 
-  // ── export helpers ──
+  // ── 내보내기 ──
   const buildMd = () => {
     if (!result) return "";
     const L = [];
@@ -299,8 +380,9 @@ export default function App() {
   };
 
   const fmtDate = (ts) => new Date(ts).toLocaleDateString("ko-KR", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  const fmtTime = (secs) => { const m = Math.floor(secs / 60); const s = secs % 60; return m > 0 ? `${m}분 ${s}초` : `${s}초`; };
 
-  // ── quiz display ──
+  // ── 퀴즈 표시 ──
   const orderedQuiz = quizOrder.length === (result?.quiz?.length || 0) && quizOrder.length > 0
     ? quizOrder.map((i) => ({ q: result.quiz[i], i }))
     : (result?.quiz || []).map((q, i) => ({ q, i }));
@@ -310,8 +392,7 @@ export default function App() {
   const totalQ     = result?.quiz?.length || 0;
   const allDone    = totalQ > 0 && Object.keys(quizResults).length === totalQ;
 
-  // ── shared button style ──
-  const btn = { border: `1px solid ${C.line}`, background: C.card, color: C.ink, padding: "8px 14px", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: "pointer" };
+  const btn   = { border: `1px solid ${C.line}`, background: C.card, color: C.ink, padding: "8px 14px", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: "pointer" };
   const btnSm = { ...btn, padding: "6px 11px", fontSize: 12 };
 
   return (
@@ -319,17 +400,73 @@ export default function App() {
       <div style={{ maxWidth: 780, margin: "0 auto", padding: "clamp(28px,5vw,56px) clamp(16px,4vw,24px) 90px" }}>
 
         {/* Header */}
-        <header style={{ marginBottom: 40 }}>
-          <div className="no-print" style={{ fontSize: 12, letterSpacing: "0.32em", textTransform: "uppercase", color: C.accent, fontWeight: 600 }}>AI Study Assistant</div>
-          <h1 style={{ fontFamily: serif, fontSize: "clamp(32px,6vw,46px)", lineHeight: 1.1, margin: "10px 0 8px", fontWeight: 700 }}>코어노트</h1>
-          <p className="no-print" style={{ color: C.inkSoft, fontSize: 16, margin: 0, maxWidth: 520 }}>
-            PDF 강의 자료를 올리면, 핵심 요약부터 개념 정리·암기 포인트·복습 퀴즈까지 한 번에 만들어 드려요.
-          </p>
+        <header style={{ marginBottom: 40, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
+          <div>
+            <div className="no-print" style={{ fontSize: 12, letterSpacing: "0.32em", textTransform: "uppercase", color: C.accent, fontWeight: 600 }}>AI Study Assistant</div>
+            <h1 style={{ fontFamily: serif, fontSize: "clamp(32px,6vw,46px)", lineHeight: 1.1, margin: "10px 0 8px", fontWeight: 700 }}>코어노트</h1>
+            <p className="no-print" style={{ color: C.inkSoft, fontSize: 16, margin: 0, maxWidth: 520 }}>
+              PDF 강의 자료를 올리면, 핵심 요약부터 개념 정리·암기 포인트·복습 퀴즈까지 한 번에 만들어 드려요.
+            </p>
+          </div>
+          <button
+            className="no-print"
+            onClick={() => setPage((p) => p === "monitor" ? "main" : "monitor")}
+            style={{ border: `1px solid ${page === "monitor" ? C.accent : C.line}`, background: page === "monitor" ? C.accentSoft : C.card, color: page === "monitor" ? C.accent : C.ink, padding: "8px 14px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer", flexShrink: 0, marginTop: 6 }}
+          >
+            📊 모니터
+          </button>
         </header>
 
         {/* ── Upload ── */}
-        {(status === "idle" || status === "error") && (
+        {page === "main" && (status === "idle" || status === "error") && (
           <div className="rise no-print">
+
+            {/* Ollama 상태 뱃지 */}
+            <div style={{ marginBottom: 18 }}>
+              {ollamaOk === null ? (
+                <span style={{ fontSize: 12, color: C.inkSoft }}>Ollama 연결 확인 중...</span>
+              ) : (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, padding: "4px 11px", borderRadius: 20, background: ollamaOk ? C.green : C.red, color: ollamaOk ? C.greenText : C.redText }}>
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "currentColor", display: "inline-block" }} />
+                  {ollamaOk ? "Ollama 준비됨" : "Ollama 연결 안 됨"}
+                </span>
+              )}
+            </div>
+
+            {/* 폴더 선택 */}
+            <div style={{ marginBottom: 14, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 13, color: C.inkSoft, flexShrink: 0 }}>저장할 폴더</span>
+              {addingDir ? (
+                <input
+                  ref={newDirRef}
+                  autoFocus
+                  value={newDirName}
+                  onChange={(e) => setNewDirName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") confirmNewDir(); if (e.key === "Escape") { setAddingDir(false); setNewDirName(""); } }}
+                  onBlur={confirmNewDir}
+                  placeholder="폴더 이름 입력 후 Enter"
+                  style={{ border: `1px solid ${C.accent}`, borderRadius: 8, padding: "5px 10px", fontSize: 13, fontFamily: sans, background: C.card, color: C.ink, outline: "none", width: 200 }}
+                />
+              ) : (
+                <select
+                  value={selectedDir}
+                  onChange={(e) => setSelectedDir(e.target.value)}
+                  style={{ border: `1px solid ${C.line}`, borderRadius: 8, padding: "5px 10px", fontSize: 13, fontFamily: sans, background: C.card, color: C.ink, cursor: "pointer" }}
+                >
+                  {[...new Set([DEFAULT_DIR, ...directories, selectedDir])].map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              )}
+              <button
+                onClick={() => { setAddingDir(true); setNewDirName(""); }}
+                style={{ ...btnSm, color: C.accent, borderColor: C.accent }}
+              >
+                + 새 폴더
+              </button>
+            </div>
+
+            {/* 드롭존 */}
             <div
               className="zone"
               onClick={() => inputRef.current?.click()}
@@ -344,63 +481,99 @@ export default function App() {
                 </svg>
               </div>
               <div style={{ fontFamily: serif, fontSize: 21, fontWeight: 700, marginBottom: 6 }}>PDF를 여기에 끌어다 놓으세요</div>
-              <div style={{ color: C.inkSoft, fontSize: 14 }}>또는 클릭해서 파일을 선택하세요 (최대 {MAX_FILE_MB}MB)</div>
+              <div style={{ color: C.inkSoft, fontSize: 14 }}>
+                또는 클릭해서 파일을 선택하세요 (최대 {MAX_FILE_MB}MB)
+              </div>
+              <div style={{ marginTop: 10, fontSize: 13, color: C.accent, fontWeight: 600 }}>
+                📁 {selectedDir}
+              </div>
               <input ref={inputRef} type="file" accept="application/pdf" style={{ display: "none" }} onChange={(e) => handleFile(e.target.files[0])} />
             </div>
             {error && <div style={{ marginTop: 16, color: C.accent, fontSize: 14, textAlign: "center" }}>{error}</div>}
 
-            {/* History */}
+            {/* 히스토리 — 폴더별 그룹 */}
             {history.length > 0 && (
               <div style={{ marginTop: 36 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.inkSoft, letterSpacing: "0.08em", marginBottom: 12 }}>최근 정리 기록</div>
-                <div style={{ display: "grid", gap: 8 }}>
-                  {history.map((item) => {
-                    const rev = reviewStatus(item);
-                    return (
-                      <div key={item.id} className="hist-item"
-                        onClick={() => loadFromHistory(item)}
-                        style={{ background: C.card, border: `1px solid ${rev?.urgent ? C.accent : C.line}`, borderRadius: 12, padding: "12px 16px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}
-                      >
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                            <div style={{ fontWeight: 600, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</div>
-                            {rev && (
-                              <span style={{ fontSize: 11, fontWeight: 600, flexShrink: 0, color: rev.urgent ? C.accent : C.inkSoft, background: rev.urgent ? C.accentSoft : C.paper2, padding: "2px 7px", borderRadius: 4 }}>
-                                {rev.text}
-                              </span>
-                            )}
-                          </div>
-                          <div style={{ fontSize: 12, color: C.inkSoft, marginTop: 2 }}>{item.fileName} · {fmtDate(item.createdAt)}</div>
-                        </div>
-                        <button onClick={(e) => removeHistory(e, item.id)} style={{ border: "none", background: "transparent", color: C.inkSoft, fontSize: 20, lineHeight: 1, padding: "2px 6px", borderRadius: 6, flexShrink: 0, cursor: "pointer" }}>×</button>
-                      </div>
-                    );
-                  })}
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.inkSoft, letterSpacing: "0.08em", marginBottom: 14 }}>
+                  정리 기록
                 </div>
+                {directories.map((dir) => (
+                  <div key={dir} style={{ marginBottom: 12 }}>
+                    {/* 폴더 헤더 */}
+                    <div
+                      onClick={() => toggleCollapse(dir)}
+                      style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 4px", cursor: "pointer", userSelect: "none" }}
+                    >
+                      <span style={{ fontSize: 15 }}>📁</span>
+                      <span style={{ fontWeight: 700, fontSize: 14 }}>{dir}</span>
+                      <span style={{ fontSize: 12, color: C.inkSoft }}>({grouped[dir].length})</span>
+                      <span style={{ marginLeft: "auto", fontSize: 12, color: C.inkSoft, transform: collapsed[dir] ? "rotate(-90deg)" : "rotate(0)", transition: "transform .2s", display: "inline-block" }}>▼</span>
+                    </div>
+
+                    {/* 폴더 내 항목 */}
+                    {!collapsed[dir] && (
+                      <div style={{ display: "grid", gap: 6, paddingLeft: 8, borderLeft: `2px solid ${C.line}`, marginLeft: 8 }}>
+                        {grouped[dir].map((item) => {
+                          const rev = reviewStatus(item);
+                          return (
+                            <div
+                              key={item.id}
+                              className="hist-item"
+                              onClick={() => loadFromHistory(item)}
+                              style={{ background: C.card, border: `1px solid ${rev?.urgent ? C.accent : C.line}`, borderRadius: 10, padding: "10px 14px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}
+                            >
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+                                  <span style={{ fontWeight: 600, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.title}</span>
+                                  {rev && (
+                                    <span style={{ fontSize: 11, fontWeight: 600, flexShrink: 0, color: rev.urgent ? C.accent : C.inkSoft, background: rev.urgent ? C.accentSoft : C.paper2, padding: "1px 6px", borderRadius: 4 }}>
+                                      {rev.text}
+                                    </span>
+                                  )}
+                                </div>
+                                <div style={{ fontSize: 11, color: C.inkSoft, marginTop: 2 }}>{item.fileName} · {fmtDate(item.createdAt)}</div>
+                              </div>
+                              <button onClick={(e) => removeHistory(e, item.id)} style={{ border: "none", background: "transparent", color: C.inkSoft, fontSize: 18, lineHeight: 1, padding: "2px 5px", borderRadius: 5, flexShrink: 0, cursor: "pointer" }}>×</button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
           </div>
         )}
 
         {/* ── Processing ── */}
-        {status === "processing" && (
-          <div className="rise no-print" style={{ textAlign: "center", padding: "64px 20px" }}>
-            <div className="spin" style={{ width: 44, height: 44, border: `3px solid ${C.accentSoft}`, borderTopColor: C.accent, borderRadius: "50%", margin: "0 auto 22px" }} />
+        {page === "main" && status === "processing" && (
+          <div className="rise no-print" style={{ textAlign: "center", padding: "52px 20px" }}>
+            <div className="spin" style={{ width: 44, height: 44, border: `3px solid ${C.accentSoft}`, borderTopColor: C.accent, borderRadius: "50%", margin: "0 auto 20px" }} />
             <div style={{ fontFamily: serif, fontSize: 20, fontWeight: 700 }}>읽고 정리하는 중…</div>
             <div style={{ color: C.inkSoft, fontSize: 14, marginTop: 6 }}>{progress.message || fileName}</div>
+
+            {/* 진행 바 */}
             {progress.step === "map" && progress.total > 1 && (
-              <div style={{ maxWidth: 280, margin: "20px auto 0" }}>
-                <div style={{ background: C.line, borderRadius: 6, height: 6, overflow: "hidden" }}>
-                  <div style={{ background: C.accent, height: "100%", borderRadius: 6, width: `${((progress.current || 0) / progress.total) * 100}%`, transition: "width 0.4s ease" }} />
+              <div style={{ maxWidth: 300, margin: "18px auto 0" }}>
+                <div style={{ background: C.line, borderRadius: 6, height: 7, overflow: "hidden" }}>
+                  <div style={{ background: C.accent, height: "100%", borderRadius: 6, width: `${((progress.current || 0) / progress.total) * 100}%`, transition: "width 0.5s ease" }} />
                 </div>
-                <div style={{ fontSize: 12, color: C.inkSoft, marginTop: 6 }}>{progress.current || 0} / {progress.total} 구간</div>
+                <div style={{ fontSize: 12, color: C.inkSoft, marginTop: 5 }}>{progress.current || 0} / {progress.total} 구간</div>
               </div>
             )}
+
+            <button
+              onClick={() => setPage("monitor")}
+              style={{ marginTop: 22, border: `1px solid ${C.line}`, background: C.card, color: C.inkSoft, padding: "7px 16px", borderRadius: 9, fontSize: 13, cursor: "pointer" }}
+            >
+              📊 실시간 통계 보기 →
+            </button>
           </div>
         )}
 
         {/* ── Result ── */}
-        {status === "done" && result && (
+        {page === "main" && status === "done" && result && (
           <div className="rise">
             {result._note && (
               <div style={{ background: C.warn, color: C.warnText, border: "1px solid #fde68a", borderRadius: 10, padding: "10px 16px", fontSize: 13, marginBottom: 18 }}>
@@ -408,16 +581,14 @@ export default function App() {
               </div>
             )}
 
-            {/* Toolbar */}
+            {/* 툴바 */}
             <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 22, flexWrap: "wrap" }}>
               <div style={{ fontSize: 13, color: C.inkSoft, display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                <span style={{ background: C.accentSoft, color: C.accent, fontWeight: 600, padding: "3px 9px", borderRadius: 6, fontSize: 12, flexShrink: 0 }}>PDF</span>
+                <span style={{ background: C.accentSoft, color: C.accent, fontWeight: 600, padding: "3px 9px", borderRadius: 6, fontSize: 12, flexShrink: 0 }}>📁 {selectedDir}</span>
                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{fileName}</span>
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {currentHid && (
-                  <button onClick={markReviewed} style={{ ...btn, background: C.accentSoft, color: C.accent, borderColor: "#c97a52" }}>복습 완료</button>
-                )}
+                {currentHid && <button onClick={markReviewed} style={{ ...btn, background: C.accentSoft, color: C.accent, borderColor: "#c97a52" }}>복습 완료</button>}
                 <button onClick={copyAll} style={btn}>{copied ? "복사됨 ✓" : "전체 복사"}</button>
                 <button onClick={downloadMd} style={btn}>MD 저장</button>
                 <button onClick={() => window.print()} style={btn}>인쇄</button>
@@ -426,7 +597,6 @@ export default function App() {
             </div>
 
             <h2 style={{ fontFamily: serif, fontSize: "clamp(22px,4vw,32px)", fontWeight: 700, margin: "0 0 14px", lineHeight: 1.2 }}>{result.title}</h2>
-
             {result.oneLineSummary && (
               <div style={{ borderLeft: `4px solid ${C.accent}`, background: C.card, padding: "16px 20px", borderRadius: "0 12px 12px 0", fontSize: 17, fontFamily: serif, lineHeight: 1.55, marginBottom: 34 }}>
                 {result.oneLineSummary}
@@ -454,28 +624,13 @@ export default function App() {
                     <div key={i} style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 12, padding: "14px 18px" }}>
                       <div style={{ fontFamily: serif, fontWeight: 700, fontSize: 16, marginBottom: 4 }}>{c.term}</div>
                       <div style={{ color: C.inkSoft, fontSize: 14.5, lineHeight: 1.6 }}>{c.explanation}</div>
-
-                      {/* 메모 — 내용은 항상 표시, 편집 UI만 no-print */}
                       {memos[key] && editingMemo !== key && (
-                        <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px dashed ${C.line}`, fontSize: 13, color: C.ink, lineHeight: 1.5 }}>
-                          {memos[key]}
-                        </div>
+                        <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px dashed ${C.line}`, fontSize: 13, color: C.ink, lineHeight: 1.5 }}>{memos[key]}</div>
                       )}
                       {editingMemo === key ? (
-                        <textarea
-                          className="no-print"
-                          autoFocus
-                          defaultValue={memos[key] || ""}
-                          onBlur={(e) => handleMemoBlur(key, e.target.value)}
-                          placeholder="내 메모..."
-                          style={{ marginTop: 10, width: "100%", minHeight: 56, resize: "vertical", border: `1px solid ${C.line}`, borderRadius: 8, padding: "7px 10px", fontSize: 13, fontFamily: sans, background: "#fffdf7", color: C.ink, boxSizing: "border-box" }}
-                        />
+                        <textarea className="no-print" autoFocus defaultValue={memos[key] || ""} onBlur={(e) => handleMemoBlur(key, e.target.value)} placeholder="내 메모..." style={{ marginTop: 10, width: "100%", minHeight: 56, resize: "vertical", border: `1px solid ${C.line}`, borderRadius: 8, padding: "7px 10px", fontSize: 13, fontFamily: sans, background: "#fffdf7", color: C.ink, boxSizing: "border-box" }} />
                       ) : (
-                        <div
-                          className="no-print"
-                          onClick={() => setEditingMemo(key)}
-                          style={{ marginTop: 8, fontSize: 12, color: C.accent, cursor: "pointer", fontStyle: "italic" }}
-                        >
+                        <div className="no-print" onClick={() => setEditingMemo(key)} style={{ marginTop: 8, fontSize: 12, color: C.accent, cursor: "pointer", fontStyle: "italic" }}>
                           {memos[key] ? "✏ 수정" : "+ 메모 추가"}
                         </div>
                       )}
@@ -489,42 +644,31 @@ export default function App() {
             <Section title="암기 포인트">
               <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
                 {(result.keyPoints || []).map((k, i) => (
-                  <div key={i} style={{ background: C.accentSoft, color: "#7a3417", borderRadius: 10, padding: "10px 14px", fontSize: 14, lineHeight: 1.5, flex: "1 1 220px" }}>
-                    {k}
-                  </div>
+                  <div key={i} style={{ background: C.accentSoft, color: "#7a3417", borderRadius: 10, padding: "10px 14px", fontSize: 14, lineHeight: 1.5, flex: "1 1 220px" }}>{k}</div>
                 ))}
               </div>
             </Section>
 
             {/* 복습 퀴즈 */}
             <Section title="복습 퀴즈">
-              {/* 퀴즈 컨트롤 */}
               <div className="no-print" style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
                 <button onClick={shuffleQuiz} style={btnSm}>셔플</button>
                 {wrongCnt > 0 && (
-                  <button
-                    onClick={() => setShowWrongOnly((v) => !v)}
-                    style={{ ...btnSm, background: showWrongOnly ? C.red : C.card, color: showWrongOnly ? C.redText : C.ink, borderColor: showWrongOnly ? C.redBorder : C.line }}
-                  >
+                  <button onClick={() => setShowWrongOnly((v) => !v)} style={{ ...btnSm, background: showWrongOnly ? C.red : C.card, color: showWrongOnly ? C.redText : C.ink, borderColor: showWrongOnly ? C.redBorder : C.line }}>
                     오답만 보기 ({wrongCnt})
                   </button>
                 )}
                 {Object.keys(quizResults).length > 0 && (
                   <>
-                    <span style={{ fontSize: 12, color: C.inkSoft }}>
-                      ✓ {correctCnt} · ✗ {wrongCnt} · ? {totalQ - Object.keys(quizResults).length}
-                    </span>
+                    <span style={{ fontSize: 12, color: C.inkSoft }}>✓ {correctCnt} · ✗ {wrongCnt} · ? {totalQ - Object.keys(quizResults).length}</span>
                     <button onClick={resetQuiz} style={{ ...btnSm, marginLeft: "auto" }}>초기화</button>
                   </>
                 )}
               </div>
 
-              {/* 전체 평가 완료 요약 */}
               {allDone && (
                 <div style={{ background: wrongCnt === 0 ? C.green : C.warn, border: `1px solid ${wrongCnt === 0 ? C.greenBorder : "#fde68a"}`, borderRadius: 10, padding: "10px 16px", fontSize: 13, marginBottom: 14, color: wrongCnt === 0 ? C.greenText : C.warnText }}>
-                  {wrongCnt === 0
-                    ? "완벽해요! 모든 문제를 맞혔습니다 🎉"
-                    : `${totalQ}문제 중 ${correctCnt}개 정답 · 오답 ${wrongCnt}개를 다시 복습하세요.`}
+                  {wrongCnt === 0 ? "완벽해요! 모든 문제를 맞혔습니다 🎉" : `${totalQ}문제 중 ${correctCnt}개 정답 · 오답 ${wrongCnt}개를 다시 복습하세요.`}
                 </div>
               )}
 
@@ -537,60 +681,29 @@ export default function App() {
                   const ev = quizResults[i];
                   return (
                     <div key={i} style={{ background: ev === "correct" ? C.green : ev === "wrong" ? C.red : C.card, border: `1px solid ${ev === "correct" ? C.greenBorder : ev === "wrong" ? C.redBorder : C.line}`, borderRadius: 12, padding: "15px 18px", transition: "background .2s, border-color .2s" }}>
-                      <div
-                        className="qcard"
-                        style={{ display: "flex", gap: 10, fontWeight: 600, fontSize: 15, lineHeight: 1.5, cursor: "pointer" }}
-                        onClick={() => setRevealed((r) => ({ ...r, [i]: !r[i] }))}
-                      >
+                      <div className="qcard" style={{ display: "flex", gap: 10, fontWeight: 600, fontSize: 15, lineHeight: 1.5, cursor: "pointer" }} onClick={() => setRevealed((r) => ({ ...r, [i]: !r[i] }))}>
                         <span style={{ color: C.accent, flexShrink: 0 }}>Q{i + 1}.</span>
                         <span>{q.question}</span>
                       </div>
-
                       {revealed[i] ? (
                         <>
-                          <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${C.line}`, color: C.inkSoft, fontSize: 14.5, lineHeight: 1.6 }}>
-                            {q.answer}
-                          </div>
-                          {/* 자기 평가 버튼 */}
+                          <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${C.line}`, color: C.inkSoft, fontSize: 14.5, lineHeight: 1.6 }}>{q.answer}</div>
                           {!ev && (
                             <div className="no-print" style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                              <button
-                                onClick={() => setQuizResults((r) => ({ ...r, [i]: "correct" }))}
-                                style={{ flex: 1, padding: "8px", borderRadius: 8, border: `1px solid ${C.greenBorder}`, background: C.green, color: C.greenText, fontWeight: 600, fontSize: 13, cursor: "pointer" }}
-                              >
-                                알았어 ✓
-                              </button>
-                              <button
-                                onClick={() => setQuizResults((r) => ({ ...r, [i]: "wrong" }))}
-                                style={{ flex: 1, padding: "8px", borderRadius: 8, border: `1px solid ${C.redBorder}`, background: C.red, color: C.redText, fontWeight: 600, fontSize: 13, cursor: "pointer" }}
-                              >
-                                몰랐어 ✗
-                              </button>
+                              <button onClick={() => setQuizResults((r) => ({ ...r, [i]: "correct" }))} style={{ flex: 1, padding: "8px", borderRadius: 8, border: `1px solid ${C.greenBorder}`, background: C.green, color: C.greenText, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>알았어 ✓</button>
+                              <button onClick={() => setQuizResults((r) => ({ ...r, [i]: "wrong" }))} style={{ flex: 1, padding: "8px", borderRadius: 8, border: `1px solid ${C.redBorder}`, background: C.red, color: C.redText, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>몰랐어 ✗</button>
                             </div>
                           )}
-                          {ev === "correct" && (
-                            <div className="no-print" style={{ marginTop: 8, fontSize: 12, color: C.greenText, fontWeight: 600 }}>✓ 알고 있었어요!</div>
-                          )}
+                          {ev === "correct" && <div className="no-print" style={{ marginTop: 8, fontSize: 12, color: C.greenText, fontWeight: 600 }}>✓ 알고 있었어요!</div>}
                           {ev === "wrong" && (
                             <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
                               <span style={{ fontSize: 12, color: C.redText, fontWeight: 600 }}>✗ 다시 복습하세요</span>
-                              <button
-                                onClick={() => setQuizResults((r) => { const n = { ...r }; delete n[i]; return n; })}
-                                style={{ fontSize: 11, color: C.inkSoft, background: "transparent", border: "none", textDecoration: "underline", cursor: "pointer" }}
-                              >
-                                취소
-                              </button>
+                              <button onClick={() => setQuizResults((r) => { const n = { ...r }; delete n[i]; return n; })} style={{ fontSize: 11, color: C.inkSoft, background: "transparent", border: "none", textDecoration: "underline", cursor: "pointer" }}>취소</button>
                             </div>
                           )}
                         </>
                       ) : (
-                        <div
-                          className="no-print"
-                          style={{ marginTop: 8, fontSize: 12.5, color: C.accent, cursor: "pointer" }}
-                          onClick={() => setRevealed((r) => ({ ...r, [i]: true }))}
-                        >
-                          탭하면 정답 보기
-                        </div>
+                        <div className="no-print" style={{ marginTop: 8, fontSize: 12.5, color: C.accent, cursor: "pointer" }} onClick={() => setRevealed((r) => ({ ...r, [i]: true }))}>탭하면 정답 보기</div>
                       )}
                     </div>
                   );
@@ -599,6 +712,144 @@ export default function App() {
             </Section>
           </div>
         )}
+
+        {/* ── Monitor Page ── */}
+        {page === "monitor" && (
+          <div className="rise">
+
+            {/* 상단 바 */}
+            <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 32 }}>
+              <button onClick={() => setPage("main")} style={{ border: `1px solid ${C.line}`, background: C.card, color: C.ink, padding: "7px 14px", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: "pointer" }}>← 돌아가기</button>
+              <h2 style={{ fontFamily: serif, fontSize: 22, fontWeight: 700, margin: 0 }}>LLM 모니터</h2>
+              {statsUpdatedAt && (
+                <span style={{ marginLeft: "auto", fontSize: 11, color: C.inkSoft }}>
+                  업데이트 {new Date(statsUpdatedAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                </span>
+              )}
+            </div>
+
+            {/* 연결 상태 */}
+            <MonSection title="연결 상태">
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: ollamaOk ? "#22c55e" : "#ef4444", display: "inline-block", flexShrink: 0 }} />
+                  <span style={{ fontWeight: 600, fontSize: 14 }}>{ollamaOk === null ? "확인 중..." : ollamaOk ? "Ollama 서버 연결됨" : "Ollama 서버 연결 안 됨"}</span>
+                </div>
+                {ollamaOk && (
+                  <div style={{ paddingLeft: 18, fontSize: 13, color: C.inkSoft }}>
+                    모델: <span style={{ color: C.ink, fontWeight: 600 }}>{liveStats.modelName || "qwen3:8b"}</span>
+                    {liveStats.modelName ? <span style={{ marginLeft: 8, color: C.greenText, fontWeight: 600, fontSize: 12, background: C.green, padding: "1px 7px", borderRadius: 4 }}>VRAM 로드됨</span>
+                    : <span style={{ marginLeft: 8, color: C.inkSoft, fontSize: 12 }}>대기 중</span>}
+                  </div>
+                )}
+              </div>
+            </MonSection>
+
+            {/* 처리 진행 상황 (처리 중에만) */}
+            {status === "processing" && (
+              <MonSection title="처리 진행 상황">
+                <div style={{ fontSize: 13, color: C.inkSoft, marginBottom: 12 }}>{progress.message}</div>
+                {progress.step === "map" && progress.total > 1 && (
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: C.inkSoft, marginBottom: 5 }}>
+                      <span>청크 처리</span>
+                      <span>{progress.current || 0} / {progress.total} 구간</span>
+                    </div>
+                    <div style={{ background: C.line, borderRadius: 6, height: 8, overflow: "hidden" }}>
+                      <div style={{ background: C.accent, height: "100%", borderRadius: 6, width: `${((progress.current || 0) / progress.total) * 100}%`, transition: "width 0.5s ease" }} />
+                    </div>
+                  </div>
+                )}
+                {progress.step === "reduce" && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div className="spin" style={{ width: 14, height: 14, border: `2px solid ${C.accentSoft}`, borderTopColor: C.accent, borderRadius: "50%", flexShrink: 0 }} />
+                    <span style={{ fontSize: 13 }}>최종 JSON 생성 중...</span>
+                  </div>
+                )}
+              </MonSection>
+            )}
+
+            {/* 리소스 통계 */}
+            <MonSection title="리소스 통계">
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "14px 20px" }}>
+                {[
+                  { icon: "⚡", label: "생성 속도", value: liveStats.tokensPerSec > 0 ? `${liveStats.tokensPerSec} tok/s` : "—" },
+                  { icon: "🖥", label: "VRAM 사용", value: liveStats.vramBytes > 0 ? `${(liveStats.vramBytes / 1e9).toFixed(1)} GB` : "—" },
+                  { icon: "⏱", label: "경과 시간", value: elapsed > 0 ? fmtTime(elapsed) : status === "done" ? "완료" : "—" },
+                  { icon: "⏳", label: "예상 완료", value: status !== "processing" ? "—" : progress.step === "reduce" ? "마무리 중..." : eta !== null ? `~${fmtTime(Math.ceil(eta / 1000))} 남음` : "계산 중..." },
+                ].map(({ icon, label, value }) => (
+                  <div key={label} style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 10, padding: "12px 16px" }}>
+                    <div style={{ fontSize: 11, color: C.inkSoft, marginBottom: 4 }}>{icon} {label}</div>
+                    <div style={{ fontSize: 18, fontWeight: 700 }}>{value}</div>
+                  </div>
+                ))}
+              </div>
+            </MonSection>
+
+            {/* 모델 상세 (VRAM에 로드된 경우) */}
+            {liveStats.vramTotal > 0 && (
+              <MonSection title="로드된 모델">
+                <div style={{ display: "grid", gap: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14 }}>
+                    <span style={{ color: C.inkSoft }}>모델</span>
+                    <span style={{ fontWeight: 600 }}>{liveStats.modelName}</span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14 }}>
+                    <span style={{ color: C.inkSoft }}>전체 크기</span>
+                    <span style={{ fontWeight: 600 }}>{(liveStats.vramTotal / 1e9).toFixed(1)} GB</span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14 }}>
+                    <span style={{ color: C.inkSoft }}>VRAM 적재</span>
+                    <span style={{ fontWeight: 600 }}>{(liveStats.vramBytes / 1e9).toFixed(1)} GB</span>
+                  </div>
+                  {liveStats.expiresAt && (
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14 }}>
+                      <span style={{ color: C.inkSoft }}>자동 해제 예정</span>
+                      <span style={{ fontWeight: 600 }}>{new Date(liveStats.expiresAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* VRAM 적재율 바 */}
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: C.inkSoft, marginBottom: 5 }}>
+                    <span>VRAM 적재율</span>
+                    <span style={{ fontWeight: 700 }}>{Math.min(100, Math.round((liveStats.vramBytes / liveStats.vramTotal) * 100))}%</span>
+                  </div>
+                  <div style={{ background: C.line, borderRadius: 6, height: 8, overflow: "hidden" }}>
+                    <div style={{ background: C.accent, width: `${Math.min(100, (liveStats.vramBytes / liveStats.vramTotal) * 100)}%`, height: "100%", borderRadius: 6, transition: "width 1s ease" }} />
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: C.inkSoft, marginTop: 4 }}>
+                    <span>0 GB</span>
+                    <span>{(liveStats.vramTotal / 1e9).toFixed(1)} GB</span>
+                  </div>
+                </div>
+              </MonSection>
+            )}
+
+            {/* 모델 미로드 안내 */}
+            {ollamaOk && !liveStats.modelName && (
+              <div style={{ color: C.inkSoft, fontSize: 13, textAlign: "center", padding: "20px 0" }}>
+                현재 VRAM에 로드된 모델이 없습니다. PDF를 처리하면 모델이 로드됩니다.
+              </div>
+            )}
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
+
+function MonSection({ title, children }) {
+  return (
+    <div style={{ marginBottom: 28 }}>
+      <h3 style={{ fontFamily: "'Gowun Batang', serif", fontSize: 16, fontWeight: 700, margin: "0 0 14px", display: "flex", alignItems: "center", gap: 8, color: "#221d15" }}>
+        <span style={{ width: 4, height: 16, background: "#b5512a", borderRadius: 2, display: "inline-block" }} />
+        {title}
+      </h3>
+      <div style={{ background: "#fcf9f1", border: "1px solid #d9cfbb", borderRadius: 12, padding: "16px 20px" }}>
+        {children}
       </div>
     </div>
   );
