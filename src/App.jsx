@@ -144,6 +144,8 @@ export default function App() {
 
   // 리소스 모니터
   const [liveStats, setLiveStats] = useState({ tokensPerSec: 0, vramBytes: 0, vramTotal: 0, modelName: null, expiresAt: null });
+  const [contextLength, setContextLength] = useState(null);
+  const [lastTokens, setLastTokens]       = useState(null); // { prompt, eval, total }
   const [elapsed, setElapsed]     = useState(0);
   const [eta, setEta]             = useState(null);
   const [ollamaOk, setOllamaOk]   = useState(null);
@@ -155,6 +157,13 @@ export default function App() {
   const startTimeRef = useRef(null);
 
   useEffect(() => { dbLoad().then(setHistory).catch(() => {}); }, []);
+
+  // 모델 컨텍스트 길이 (최초 1회)
+  useEffect(() => {
+    fetch("/api/modelinfo").then((r) => r.json()).then((d) => {
+      if (d.ok && d.contextLength) setContextLength(d.contextLength);
+    }).catch(() => {});
+  }, []);
 
   // Ollama 상태 폴링 (idle 화면 뱃지용)
   useEffect(() => {
@@ -310,6 +319,7 @@ export default function App() {
           if (ev.type === "done") {
             setResult(ev.result);
             setStatus("done");
+            if (ev.tokens) setLastTokens(ev.tokens);
             initQuiz(ev.result.quiz);
             setMemos({});
             setCurrentHid(null);
@@ -605,6 +615,11 @@ export default function App() {
                 <div style={{ fontSize: 12, color: C.inkSoft, marginTop: 5 }}>{progress.current || 0} / {progress.total} 구간</div>
               </div>
             )}
+            {progress.step === "compress" && (
+              <div style={{ maxWidth: 300, margin: "18px auto 0", background: C.warn, border: "1px solid #fde68a", borderRadius: 10, padding: "10px 14px", fontSize: 13, color: C.warnText }}>
+                ⚡ {progress.message}
+              </div>
+            )}
 
             <div style={{ marginTop: 22, display: "flex", gap: 10, justifyContent: "center" }}>
               <button
@@ -882,6 +897,53 @@ export default function App() {
                 ))}
               </div>
             </MonSection>
+
+            {/* 컨텍스트 사용량 */}
+            {(lastTokens || contextLength) && (
+              <MonSection title="컨텍스트 사용량">
+                <div style={{ display: "grid", gap: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: 14 }}>
+                    <span style={{ color: C.inkSoft }}>최대 컨텍스트</span>
+                    <span style={{ fontWeight: 700, fontFamily: serif, fontSize: 16 }}>
+                      {contextLength ? contextLength.toLocaleString() : "—"}
+                      <span style={{ fontSize: 12, fontWeight: 400, color: C.inkSoft, marginLeft: 6 }}>tokens</span>
+                    </span>
+                  </div>
+                  {lastTokens && (
+                    <>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: 14 }}>
+                        <span style={{ color: C.inkSoft }}>최종 요약 입력</span>
+                        <span style={{ fontWeight: 700, fontFamily: serif, fontSize: 16 }}>
+                          {lastTokens.prompt.toLocaleString()}
+                          {contextLength ? ` / ${contextLength.toLocaleString()}` : ""}
+                          <span style={{ fontSize: 12, fontWeight: 400, color: C.inkSoft, marginLeft: 6 }}>tokens</span>
+                        </span>
+                      </div>
+                      {contextLength && (
+                        <>
+                          <div style={{ background: C.line, borderRadius: 6, height: 8, overflow: "hidden" }}>
+                            <div style={{
+                              background: lastTokens.prompt / contextLength > 0.85 ? "#ef4444" : lastTokens.prompt / contextLength > 0.6 ? "#f59e0b" : C.accent,
+                              width: `${Math.min(100, (lastTokens.prompt / contextLength) * 100)}%`,
+                              height: "100%", borderRadius: 6, transition: "width 0.5s ease",
+                            }} />
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: C.inkSoft }}>
+                            <span>{Math.round((lastTokens.prompt / contextLength) * 100)}% 사용</span>
+                            <span>여유 {(contextLength - lastTokens.prompt).toLocaleString()} tokens</span>
+                          </div>
+                        </>
+                      )}
+                      <div style={{ display: "flex", gap: 16, fontSize: 13, color: C.inkSoft, paddingTop: 6, borderTop: `1px solid ${C.line}` }}>
+                        <span>입력 <b style={{ color: C.ink }}>{lastTokens.prompt.toLocaleString()}</b></span>
+                        <span>생성 <b style={{ color: C.ink }}>{lastTokens.eval.toLocaleString()}</b></span>
+                        <span>합계 <b style={{ color: C.ink }}>{lastTokens.total.toLocaleString()}</b></span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </MonSection>
+            )}
 
             {/* 모델 상세 (VRAM에 로드된 경우) */}
             {liveStats.vramTotal > 0 && (

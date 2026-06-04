@@ -18,6 +18,22 @@ const MAX_CHUNK_CHARS = Number(process.env.MAX_CHUNK_CHARS || 6000);
 const MAX_CHUNKS = Number(process.env.MAX_CHUNKS || 12);
 const MAX_PDF_MB = 50;
 
+// 시작 시 모델 컨텍스트 길이 조회 (압축 임계값 계산용)
+let MODEL_CONTEXT_LENGTH = 8192; // 연결 전 보수적 기본값
+(async () => {
+  try {
+    const r = await fetch(`${OLLAMA_URL}/api/show`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: MODEL }),
+    });
+    const data = await r.json();
+    const info = data.model_info || {};
+    const key = Object.keys(info).find((k) => k.endsWith(".context_length"));
+    if (key) MODEL_CONTEXT_LENGTH = info[key];
+    console.log(`컨텍스트 길이: ${MODEL_CONTEXT_LENGTH.toLocaleString()} tokens`);
+  } catch {}
+})();
+
 app.use(cors());
 app.use(express.json({ limit: "64mb" }));
 
@@ -77,7 +93,8 @@ async function ollamaChat(messages, { json = false, retries = 2 } = {}) {
       const evalCount = data.eval_count ?? 0;
       const evalDuration = data.eval_duration ?? 0; // nanoseconds
       const tokensPerSec = evalDuration > 0 ? Math.round(evalCount / (evalDuration / 1e9)) : 0;
-      return { content: data.message?.content ?? "", tokensPerSec };
+      const promptEvalCount = data.prompt_eval_count ?? 0;
+      return { content: data.message?.content ?? "", tokensPerSec, promptEvalCount, evalCount };
     } catch (e) {
       if (e.fatal) throw e;
       const code = e?.cause?.code || e?.code || "";
@@ -87,6 +104,30 @@ async function ollamaChat(messages, { json = false, retries = 2 } = {}) {
     }
   }
   throw lastErr;
+}
+
+// 중간 압축 — sourceForFinal이 너무 클 때 reduce 전에 호출
+// 임계값: 컨텍스트의 40% (토큰 기준). 한국어 평균 2.5자/토큰으로 환산.
+function compressThresholdChars() {
+  return Math.floor(MODEL_CONTEXT_LENGTH * 0.40 * 2.5);
+}
+
+async function compressSource(source) {
+  // 재귀 분할: 단일 압축 호출에 넣기 너무 크면 반으로 나눠 각각 압축 후 합산
+  const singleLimit = Math.floor(MODEL_CONTEXT_LENGTH * 0.70 * 2.5);
+  if (source.length > singleLimit) {
+    const mid = source.lastIndexOf("\n", Math.floor(source.length / 2)) + 1 || Math.floor(source.length / 2);
+    const [a, b] = await Promise.all([compressSource(source.slice(0, mid)), compressSource(source.slice(mid))]);
+    return `${a}\n${b}`;
+  }
+  const { content } = await ollamaChat([
+    { role: "system", content: "당신은 학습 자료 압축 전문가입니다." },
+    {
+      role: "user",
+      content: `다음 학습 내용을 핵심 개념·정의·수치·예시는 반드시 유지하면서 절반 이하로 압축하세요. 불릿(- ) 형식을 유지하고 결과만 출력하세요.\n\n${source}`,
+    },
+  ]);
+  return clean(content);
 }
 
 // JSON 파싱 — 직접 파싱 실패 시 응답에서 JSON 객체 추출 시도
@@ -109,8 +150,9 @@ function normalizeResult(parsed) {
     quiz: Array.isArray(parsed.quiz) ? parsed.quiz.reduce((acc, q) => {
       if (!q || typeof q.question !== "string") return acc;
       if (q.type === "mc") {
-        if (!Array.isArray(q.options) || q.options.length < 4 || typeof q.correct !== "number") return acc;
-        acc.push({ type: "mc", question: q.question, options: q.options.slice(0, 4).map(String), correct: Math.min(3, Math.max(0, Math.round(q.correct))), answer: typeof q.answer === "string" ? q.answer : "" });
+        const correctIdx = Number(q.correct);
+        if (!Array.isArray(q.options) || q.options.length < 4 || !Number.isFinite(correctIdx)) return acc;
+        acc.push({ type: "mc", question: q.question, options: q.options.slice(0, 4).map(String), correct: Math.min(3, Math.max(0, Math.round(correctIdx))), answer: typeof q.answer === "string" ? q.answer : "" });
       } else {
         if (typeof q.answer !== "string") return acc;
         acc.push({ type: "open", question: q.question, answer: q.answer });
@@ -122,13 +164,16 @@ function normalizeResult(parsed) {
 
 const FINAL_PROMPT = `아래 학습 자료를 학생이 빠르게 이해·복습할 수 있도록 정리하세요.
 
-반드시 아래 구조의 JSON 객체 하나만 출력합니다. 설명 문장이나 코드펜스 없이 오직 JSON만 출력하세요.
+출력 규칙 (반드시 준수):
+1. 아래 JSON 구조를 정확히 따른다. 최상위 키는 title, oneLineSummary, summary, concepts, keyPoints, quiz 여섯 개뿐이다.
+2. content, data, result 등 다른 래퍼 키나 중첩 구조를 절대 사용하지 않는다.
+3. 설명 문장, 코드펜스, 주석 없이 JSON만 출력한다.
 
 {
   "title": "문서의 제목 또는 핵심 주제",
   "oneLineSummary": "문서 전체를 한 문장으로 압축한 요약",
-  "summary": ["핵심 요약 포인트", "..."],
-  "concepts": [{"term": "핵심 용어/개념", "explanation": "이해하기 쉬운 설명"}],
+  "summary": ["핵심 포인트 — 구체적인 내용 포함", "..."],
+  "concepts": [{"term": "핵심 용어", "explanation": "정의와 중요성을 포함한 설명"}],
   "keyPoints": ["시험·복습에 중요한 암기 포인트", "..."],
   "quiz": [
     {"type":"open","question":"주관식 질문","answer":"정답과 해설"},
@@ -136,15 +181,14 @@ const FINAL_PROMPT = `아래 학습 자료를 학생이 빠르게 이해·복습
   ]
 }
 
-규칙:
-- summary 6~10개. 중요한 개념·정의·수치·예시를 빠뜨리지 말고 각 포인트를 2문장 이상으로 구체적으로 작성한다.
-- concepts 4~10개. explanation은 단순 정의에 그치지 않고 왜 중요한지, 어떻게 쓰이는지를 포함한다.
-- keyPoints 4~8개. quiz는 4~6개. open(주관식) 2개 + mc(4지선다) 2~4개를 섞어서 출제한다.
-- mc의 correct는 정답 선택지의 0-based 인덱스(0~3). options는 반드시 정확히 4개.
-- mc의 options에는 매력적인 오답(그럴듯하지만 틀린 선택지)을 포함해 변별력을 높인다.
+내용 규칙:
+- summary 5~8개. 각 항목은 단순 키워드가 아니라 내용을 충분히 담은 문장으로 작성한다.
+- concepts 4~8개. explanation은 정의에 그치지 않고 왜 중요한지·어떻게 쓰이는지를 포함한다.
+- keyPoints 3~6개. quiz 4~5개 (open 2개 + mc 2~3개).
+- mc의 correct는 0-based 정수 인덱스(0~3). options는 정확히 4개.
+- mc의 options에는 그럴듯한 오답을 포함해 변별력을 높인다.
 - 모든 설명은 한국어로 작성(전문 용어는 원어 병기 가능).
-- 자료에 실제로 있는 내용에만 근거하고 지어내지 않는다. 내용을 과도하게 압축하거나 생략하지 않는다.
-- quiz의 answer는 단순 단어가 아닌 학습에 도움이 되는 충분한 설명을 포함한다.`;
+- 자료에 실제로 있는 내용에만 근거하고 지어내지 않는다.`;
 
 app.post("/api/summarize", async (req, res) => {
   // SSE 설정
@@ -221,8 +265,17 @@ app.post("/api/summarize", async (req, res) => {
       sourceForFinal = partials.join("\n");
     }
 
+    // 3) 필요 시 중간 압축
+    if (sourceForFinal.length > compressThresholdChars()) {
+      const beforeLen = sourceForFinal.length;
+      send({ type: "progress", step: "compress", message: `내용이 많아 중간 압축 중… (${Math.round(beforeLen / 1000)}K자)` });
+      sourceForFinal = await compressSource(sourceForFinal);
+      console.log(`[compress] ${beforeLen} → ${sourceForFinal.length} chars`);
+      send({ type: "progress", step: "compress", message: `압축 완료 (${Math.round(beforeLen / 1000)}K → ${Math.round(sourceForFinal.length / 1000)}K자)` });
+    }
+
     send({ type: "progress", step: "reduce", message: "최종 정리 중..." });
-    const { content: raw } = await ollamaChat(
+    const { content: raw, promptEvalCount: reducePrompt, evalCount: reduceEval } = await ollamaChat(
       [
         { role: "system", content: "당신은 학생의 학습을 돕는 전문 튜터입니다. 항상 유효한 JSON만 출력합니다." },
         { role: "user", content: `${FINAL_PROMPT}\n\n[정리 대상]\n${sourceForFinal}` },
@@ -237,9 +290,13 @@ app.post("/api/summarize", async (req, res) => {
       return res.end();
     }
 
+    console.log("[raw]", clean(raw).slice(0, 600));
+    console.log("[parsed keys]", Object.keys(parsed));
+    console.log("[parsed] concepts:", parsed.concepts?.length, "quiz:", parsed.quiz?.length);
     const result = normalizeResult(parsed);
+    console.log("[normalized] concepts:", result.concepts.length, "quiz:", result.quiz.length);
     if (truncated) result._note = `문서가 길어 앞 ${MAX_CHUNKS}개 구간(전체 ${all.length}개)만 정리했습니다. 뒷부분 내용이 누락되었을 수 있어요.`;
-    send({ type: "done", result });
+    send({ type: "done", result, tokens: { prompt: reducePrompt, eval: reduceEval, total: reducePrompt + reduceEval } });
     res.end();
   } catch (e) {
     const m = String(e.message || "");
@@ -251,6 +308,24 @@ app.post("/api/summarize", async (req, res) => {
     else
       send({ type: "error", message: "요약 처리 중 오류가 발생했습니다." });
     res.end();
+  }
+});
+
+// 모델 정보 — 최대 컨텍스트 길이 등
+app.get("/api/modelinfo", async (_req, res) => {
+  try {
+    const r = await fetch(`${OLLAMA_URL}/api/show`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: MODEL }),
+    });
+    if (!r.ok) return res.json({ ok: false });
+    const data = await r.json();
+    const info = data.model_info || {};
+    const contextKey = Object.keys(info).find((k) => k.endsWith(".context_length"));
+    res.json({ ok: true, contextLength: contextKey ? info[contextKey] : null, model: MODEL });
+  } catch {
+    res.json({ ok: false });
   }
 });
 
