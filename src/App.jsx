@@ -394,16 +394,34 @@ export default function App() {
     if (!result) return "";
     const L = [];
     L.push(`# ${result.title}\n`);
-    L.push(`> ${result.oneLineSummary}\n`);
-    L.push(`## 핵심 요약`);
-    (result.summary || []).forEach((s, i) => L.push(`${i + 1}. ${s}`));
-    L.push(`\n## 주요 개념`);
-    (result.concepts || []).forEach((c, i) => {
-      L.push(`**${c.term}**: ${c.explanation}`);
-      if (memos[`c${i}`]) L.push(`  > 메모: ${memos[`c${i}`]}`);
-    });
-    L.push(`\n## 암기 포인트`);
-    (result.keyPoints || []).forEach((k) => L.push(`- ${k}`));
+    if (result.sections) {
+      // 새 형식
+      L.push(`> ${result.summary}\n`);
+      (result.sections || []).forEach((sec, si) => {
+        L.push(`\n## ${String(si + 1).padStart(2, "0")}. ${sec.title}`);
+        (sec.topics || []).forEach((topic) => {
+          L.push(`\n### ${topic.title}`);
+          L.push(`**내용:**`);
+          (topic.content || []).forEach((c) => L.push(`- ${c}`));
+          if (topic.easyExplanation) {
+            L.push(`\n**쉬운 설명:**`);
+            L.push(`> ${topic.easyExplanation}`);
+          }
+        });
+      });
+    } else {
+      // 구 형식
+      L.push(`> ${result.oneLineSummary}\n`);
+      L.push(`## 핵심 요약`);
+      (result.summary || []).forEach((s, i) => L.push(`${i + 1}. ${s}`));
+      L.push(`\n## 주요 개념`);
+      (result.concepts || []).forEach((c, i) => {
+        L.push(`**${c.term}**: ${c.explanation}`);
+        if (memos[`c${i}`]) L.push(`  > 메모: ${memos[`c${i}`]}`);
+      });
+      L.push(`\n## 암기 포인트`);
+      (result.keyPoints || []).forEach((k) => L.push(`- ${k}`));
+    }
     L.push(`\n## 복습 퀴즈`);
     (result.quiz || []).forEach((q, i) => {
       if (q.type === "mc") {
@@ -430,6 +448,13 @@ export default function App() {
     a.download = `${(result.title || fileName).replace(/[\\/:*?"<>|]/g, "_")}.md`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const downloadPdf = () => {
+    const prev = document.title;
+    document.title = `${(result.title || fileName).replace(/[\\/:*?"<>|]/g, "_")} 요약본`;
+    window.print();
+    setTimeout(() => { document.title = prev; }, 1000);
   };
 
   const fmtDate = (ts) => new Date(ts).toLocaleDateString("ko-KR", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -621,6 +646,31 @@ export default function App() {
               </div>
             )}
 
+            {/* 처리 중 토큰 사용량 */}
+            {(() => {
+              const tokens = progress.step === "reduce" ? progress.estimatedTokens : progress.totalTokensUsed;
+              const max = contextLength || progress.contextLength;
+              if (!tokens) return null;
+              const ratio = max ? tokens / max : null;
+              const color = ratio > 0.85 ? "#ef4444" : ratio > 0.6 ? "#f59e0b" : C.accent;
+              const label = progress.step === "reduce" ? "최종 요약 입력 (추정)" : "분석 입력량 (추정)";
+              return (
+                <div style={{ maxWidth: 300, margin: "14px auto 0" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: C.inkSoft, marginBottom: 4 }}>
+                    <span>{label}</span>
+                    <span style={{ fontWeight: 600 }}>
+                      {tokens.toLocaleString()}{max ? ` / ${max.toLocaleString()}` : ""} tokens
+                    </span>
+                  </div>
+                  {max && (
+                    <div style={{ background: C.line, borderRadius: 6, height: 6, overflow: "hidden" }}>
+                      <div style={{ background: color, width: `${Math.min(100, ratio * 100)}%`, height: "100%", borderRadius: 6, transition: "width 0.5s ease" }} />
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             <div style={{ marginTop: 22, display: "flex", gap: 10, justifyContent: "center" }}>
               <button
                 onClick={() => setPage("monitor")}
@@ -657,63 +707,94 @@ export default function App() {
                 {currentHid && <button onClick={markReviewed} style={{ ...btn, background: C.accentSoft, color: C.accent, borderColor: "#c97a52" }}>복습 완료</button>}
                 <button onClick={copyAll} style={btn}>{copied ? "복사됨 ✓" : "전체 복사"}</button>
                 <button onClick={downloadMd} style={btn}>MD 저장</button>
+                <button onClick={downloadPdf} style={btn}>PDF 저장</button>
                 <button onClick={() => window.print()} style={btn}>인쇄</button>
                 <button onClick={reset} style={{ ...btn, border: "none", background: C.ink, color: C.paper }}>새 PDF</button>
               </div>
             </div>
 
             <h2 style={{ fontFamily: serif, fontSize: "clamp(22px,4vw,32px)", fontWeight: 700, margin: "0 0 14px", lineHeight: 1.2 }}>{result.title}</h2>
-            {result.oneLineSummary && (
+            {(result.sections ? result.summary : result.oneLineSummary) && (
               <div style={{ borderLeft: `4px solid ${C.accent}`, background: C.card, padding: "16px 20px", borderRadius: "0 12px 12px 0", fontSize: 17, fontFamily: serif, lineHeight: 1.55, marginBottom: 34 }}>
-                {result.oneLineSummary}
+                {result.sections ? result.summary : result.oneLineSummary}
               </div>
             )}
 
-            {/* 핵심 요약 */}
-            <Section title="핵심 요약">
-              <ul style={{ margin: 0, paddingLeft: 0, listStyle: "none" }}>
-                {(result.summary || []).map((s, i) => (
-                  <li key={i} style={{ display: "flex", gap: 12, padding: "9px 0", lineHeight: 1.6 }}>
-                    <span style={{ color: C.accent, fontWeight: 700, flexShrink: 0 }}>{String(i + 1).padStart(2, "0")}</span>
-                    <span>{s}</span>
-                  </li>
-                ))}
-              </ul>
-            </Section>
-
-            {/* 주요 개념 */}
-            <Section title="주요 개념">
-              <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))" }}>
-                {(result.concepts || []).map((c, i) => {
-                  const key = `c${i}`;
-                  return (
-                    <div key={i} style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 12, padding: "14px 18px" }}>
-                      <div style={{ fontFamily: serif, fontWeight: 700, fontSize: 16, marginBottom: 4 }}>{c.term}</div>
-                      <div style={{ color: C.inkSoft, fontSize: 14.5, lineHeight: 1.6 }}>{c.explanation}</div>
-                      {memos[key] && editingMemo !== key && (
-                        <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px dashed ${C.line}`, fontSize: 13, color: C.ink, lineHeight: 1.5 }}>{memos[key]}</div>
-                      )}
-                      {editingMemo === key ? (
-                        <textarea className="no-print" autoFocus defaultValue={memos[key] || ""} onBlur={(e) => handleMemoBlur(key, e.target.value)} placeholder="내 메모..." style={{ marginTop: 10, width: "100%", minHeight: 56, resize: "vertical", border: `1px solid ${C.line}`, borderRadius: 8, padding: "7px 10px", fontSize: 13, fontFamily: sans, background: "#fffdf7", color: C.ink, boxSizing: "border-box" }} />
-                      ) : (
-                        <div className="no-print" onClick={() => setEditingMemo(key)} style={{ marginTop: 8, fontSize: 12, color: C.accent, cursor: "pointer", fontStyle: "italic" }}>
-                          {memos[key] ? "✏ 수정" : "+ 메모 추가"}
+            {/* ── 새 형식: 섹션별 정리 ── */}
+            {result.sections && (result.sections || []).map((sec, si) => (
+              <Section key={si} title={sec.title}>
+                <div style={{ display: "grid", gap: 16 }}>
+                  {(sec.topics || []).map((topic, ti) => (
+                    <div key={ti} style={{ border: `1px solid ${C.line}`, borderRadius: 12, overflow: "hidden" }}>
+                      <div style={{ background: C.paper2, padding: "10px 18px", fontFamily: serif, fontWeight: 700, fontSize: 16, borderBottom: `1px solid ${C.line}` }}>
+                        {topic.title}
+                      </div>
+                      <div style={{ padding: "14px 18px" }}>
+                        <ul style={{ margin: 0, paddingLeft: 22, display: "grid", gap: 4 }}>
+                          {(topic.content || []).map((c, ci) => (
+                            <li key={ci} style={{ lineHeight: 1.75, fontSize: 14.5, color: C.ink }}>{c}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      {topic.easyExplanation && (
+                        <div style={{ background: C.warn, borderTop: `1px dashed ${C.line}`, padding: "12px 18px" }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: C.warnText, marginBottom: 6, letterSpacing: "0.06em" }}>쉬운 설명</div>
+                          <div style={{ fontSize: 14, lineHeight: 1.75, color: C.warnText, whiteSpace: "pre-wrap" }}>{topic.easyExplanation}</div>
                         </div>
                       )}
                     </div>
-                  );
-                })}
-              </div>
-            </Section>
+                  ))}
+                </div>
+              </Section>
+            ))}
 
-            {/* 암기 포인트 */}
-            <Section title="암기 포인트">
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-                {(result.keyPoints || []).map((k, i) => (
-                  <div key={i} style={{ background: C.accentSoft, color: "#7a3417", borderRadius: 10, padding: "10px 14px", fontSize: 14, lineHeight: 1.5, flex: "1 1 220px" }}>{k}</div>
-                ))}
-              </div>
-            </Section>
+            {/* ── 구 형식: 핵심 요약 / 주요 개념 / 암기 포인트 ── */}
+            {!result.sections && (
+              <>
+                <Section title="핵심 요약">
+                  <ul style={{ margin: 0, paddingLeft: 0, listStyle: "none" }}>
+                    {(result.summary || []).map((s, i) => (
+                      <li key={i} style={{ display: "flex", gap: 12, padding: "9px 0", lineHeight: 1.6 }}>
+                        <span style={{ color: C.accent, fontWeight: 700, flexShrink: 0 }}>{String(i + 1).padStart(2, "0")}</span>
+                        <span>{s}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </Section>
+
+                <Section title="주요 개념">
+                  <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))" }}>
+                    {(result.concepts || []).map((c, i) => {
+                      const key = `c${i}`;
+                      return (
+                        <div key={i} style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 12, padding: "14px 18px" }}>
+                          <div style={{ fontFamily: serif, fontWeight: 700, fontSize: 16, marginBottom: 4 }}>{c.term}</div>
+                          <div style={{ color: C.inkSoft, fontSize: 14.5, lineHeight: 1.6 }}>{c.explanation}</div>
+                          {memos[key] && editingMemo !== key && (
+                            <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px dashed ${C.line}`, fontSize: 13, color: C.ink, lineHeight: 1.5 }}>{memos[key]}</div>
+                          )}
+                          {editingMemo === key ? (
+                            <textarea className="no-print" autoFocus defaultValue={memos[key] || ""} onBlur={(e) => handleMemoBlur(key, e.target.value)} placeholder="내 메모..." style={{ marginTop: 10, width: "100%", minHeight: 56, resize: "vertical", border: `1px solid ${C.line}`, borderRadius: 8, padding: "7px 10px", fontSize: 13, fontFamily: sans, background: "#fffdf7", color: C.ink, boxSizing: "border-box" }} />
+                          ) : (
+                            <div className="no-print" onClick={() => setEditingMemo(key)} style={{ marginTop: 8, fontSize: 12, color: C.accent, cursor: "pointer", fontStyle: "italic" }}>
+                              {memos[key] ? "✏ 수정" : "+ 메모 추가"}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </Section>
+
+                <Section title="암기 포인트">
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+                    {(result.keyPoints || []).map((k, i) => (
+                      <div key={i} style={{ background: C.accentSoft, color: "#7a3417", borderRadius: 10, padding: "10px 14px", fontSize: 14, lineHeight: 1.5, flex: "1 1 220px" }}>{k}</div>
+                    ))}
+                  </div>
+                </Section>
+              </>
+            )}
 
             {/* 복습 퀴즈 */}
             <Section title="복습 퀴즈">
@@ -791,6 +872,15 @@ export default function App() {
                           {mcSelected[i] !== undefined && q.answer && (
                             <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px dashed ${C.line}`, color: C.inkSoft, fontSize: 14, lineHeight: 1.6 }}>{q.answer}</div>
                           )}
+                        {/* 인쇄 전용: 보기 목록 + 정답 표시 */}
+                        <div className="print-only" style={{ marginTop: 12 }}>
+                          {(q.options || []).map((opt, oi) => (
+                            <div key={oi} style={{ padding: "3px 0", fontWeight: oi === q.correct ? 700 : 400, color: oi === q.correct ? C.greenText : C.ink, fontSize: 14 }}>
+                              {String.fromCharCode(65 + oi)}. {opt}{oi === q.correct ? " ✓" : ""}
+                            </div>
+                          ))}
+                          {q.answer && <div style={{ marginTop: 8, paddingTop: 8, borderTop: `1px dashed ${C.line}`, color: C.inkSoft, fontSize: 13 }}>해설: {q.answer}</div>}
+                        </div>
                         </>
                       ) : (
                         /* ── 주관식 ── */
@@ -813,7 +903,10 @@ export default function App() {
                               )}
                             </>
                           ) : (
-                            <div className="no-print" style={{ marginTop: 8, fontSize: 12.5, color: C.accent, cursor: "pointer" }} onClick={() => setRevealed((r) => ({ ...r, [i]: true }))}>탭하면 정답 보기</div>
+                            <>
+                              <div className="no-print" style={{ marginTop: 8, fontSize: 12.5, color: C.accent, cursor: "pointer" }} onClick={() => setRevealed((r) => ({ ...r, [i]: true }))}>탭하면 정답 보기</div>
+                              <div className="print-only" style={{ marginTop: 10, paddingTop: 10, borderTop: `1px dashed ${C.line}`, color: C.inkSoft, fontSize: 14.5, lineHeight: 1.6 }}>{q.answer}</div>
+                            </>
                           )}
                         </>
                       )}
@@ -899,51 +992,60 @@ export default function App() {
             </MonSection>
 
             {/* 컨텍스트 사용량 */}
-            {(lastTokens || contextLength) && (
-              <MonSection title="컨텍스트 사용량">
-                <div style={{ display: "grid", gap: 10 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: 14 }}>
-                    <span style={{ color: C.inkSoft }}>최대 컨텍스트</span>
-                    <span style={{ fontWeight: 700, fontFamily: serif, fontSize: 16 }}>
-                      {contextLength ? contextLength.toLocaleString() : "—"}
-                      <span style={{ fontSize: 12, fontWeight: 400, color: C.inkSoft, marginLeft: 6 }}>tokens</span>
-                    </span>
+            {(lastTokens || contextLength || progress.estimatedTokens || progress.totalTokensUsed) && (() => {
+              const maxTokens = contextLength || progress.contextLength;
+              // 처리 중: reduce면 estimatedTokens, map이면 totalTokensUsed
+              const liveTokens = progress.estimatedTokens || progress.totalTokensUsed;
+              const displayTokens = lastTokens ? lastTokens.prompt : liveTokens;
+              const ratio = displayTokens && maxTokens ? displayTokens / maxTokens : null;
+              const barColor = ratio > 0.85 ? "#ef4444" : ratio > 0.6 ? "#f59e0b" : C.accent;
+              const liveLabel = progress.step === "reduce" ? "최종 요약 입력 (추정)" : "분석 입력량 (추정)";
+              return (
+                <MonSection title="컨텍스트 사용량">
+                  <div style={{ display: "grid", gap: 10 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: 14 }}>
+                      <span style={{ color: C.inkSoft }}>최대 컨텍스트</span>
+                      <span style={{ fontWeight: 700, fontFamily: serif, fontSize: 16 }}>
+                        {maxTokens ? maxTokens.toLocaleString() : "—"}
+                        <span style={{ fontSize: 12, fontWeight: 400, color: C.inkSoft, marginLeft: 6 }}>tokens</span>
+                      </span>
+                    </div>
+                    {displayTokens && (
+                      <>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: 14 }}>
+                          <span style={{ color: C.inkSoft }}>
+                            {lastTokens ? "요약 입력" : liveLabel}
+                          </span>
+                          <span style={{ fontWeight: 700, fontFamily: serif, fontSize: 16 }}>
+                            {displayTokens.toLocaleString()}
+                            {maxTokens ? ` / ${maxTokens.toLocaleString()}` : ""}
+                            <span style={{ fontSize: 12, fontWeight: 400, color: C.inkSoft, marginLeft: 6 }}>tokens</span>
+                          </span>
+                        </div>
+                        {maxTokens && (
+                          <>
+                            <div style={{ background: C.line, borderRadius: 6, height: 8, overflow: "hidden" }}>
+                              <div style={{ background: barColor, width: `${Math.min(100, ratio * 100)}%`, height: "100%", borderRadius: 6, transition: "width 0.5s ease" }} />
+                            </div>
+                            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: C.inkSoft }}>
+                              <span>{Math.round(ratio * 100)}% 사용</span>
+                              <span>여유 {(maxTokens - displayTokens).toLocaleString()} tokens</span>
+                            </div>
+                          </>
+                        )}
+                        {lastTokens && (
+                          <div style={{ display: "flex", gap: 16, fontSize: 13, color: C.inkSoft, paddingTop: 6, borderTop: `1px solid ${C.line}` }}>
+                            <span>입력 <b style={{ color: C.ink }}>{lastTokens.prompt.toLocaleString()}</b></span>
+                            <span>생성 <b style={{ color: C.ink }}>{lastTokens.eval.toLocaleString()}</b></span>
+                            <span>합계 <b style={{ color: C.ink }}>{lastTokens.total.toLocaleString()}</b></span>
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
-                  {lastTokens && (
-                    <>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: 14 }}>
-                        <span style={{ color: C.inkSoft }}>최종 요약 입력</span>
-                        <span style={{ fontWeight: 700, fontFamily: serif, fontSize: 16 }}>
-                          {lastTokens.prompt.toLocaleString()}
-                          {contextLength ? ` / ${contextLength.toLocaleString()}` : ""}
-                          <span style={{ fontSize: 12, fontWeight: 400, color: C.inkSoft, marginLeft: 6 }}>tokens</span>
-                        </span>
-                      </div>
-                      {contextLength && (
-                        <>
-                          <div style={{ background: C.line, borderRadius: 6, height: 8, overflow: "hidden" }}>
-                            <div style={{
-                              background: lastTokens.prompt / contextLength > 0.85 ? "#ef4444" : lastTokens.prompt / contextLength > 0.6 ? "#f59e0b" : C.accent,
-                              width: `${Math.min(100, (lastTokens.prompt / contextLength) * 100)}%`,
-                              height: "100%", borderRadius: 6, transition: "width 0.5s ease",
-                            }} />
-                          </div>
-                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: C.inkSoft }}>
-                            <span>{Math.round((lastTokens.prompt / contextLength) * 100)}% 사용</span>
-                            <span>여유 {(contextLength - lastTokens.prompt).toLocaleString()} tokens</span>
-                          </div>
-                        </>
-                      )}
-                      <div style={{ display: "flex", gap: 16, fontSize: 13, color: C.inkSoft, paddingTop: 6, borderTop: `1px solid ${C.line}` }}>
-                        <span>입력 <b style={{ color: C.ink }}>{lastTokens.prompt.toLocaleString()}</b></span>
-                        <span>생성 <b style={{ color: C.ink }}>{lastTokens.eval.toLocaleString()}</b></span>
-                        <span>합계 <b style={{ color: C.ink }}>{lastTokens.total.toLocaleString()}</b></span>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </MonSection>
-            )}
+                </MonSection>
+              );
+            })()}
 
             {/* 모델 상세 (VRAM에 로드된 경우) */}
             {liveStats.vramTotal > 0 && (

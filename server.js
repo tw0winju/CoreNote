@@ -40,6 +40,7 @@ app.use(express.json({ limit: "64mb" }));
 function clean(s) {
   return String(s)
     .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/<\/think>/gi, "")   // 고아 </think> 태그 제거
     .replace(/```json|```/g, "")
     .trim();
 }
@@ -130,65 +131,151 @@ async function compressSource(source) {
   return clean(content);
 }
 
+const EXPECTED_KEYS = new Set(["title", "summary", "sections", "quiz", "oneLineSummary", "concepts", "keyPoints"]);
+
 // JSON 파싱 — 직접 파싱 실패 시 응답에서 JSON 객체 추출 시도
 function parseResult(raw) {
   const s = clean(raw);
-  try { return JSON.parse(s); } catch {}
-  const m = s.match(/\{[\s\S]*\}/);
-  if (m) { try { return JSON.parse(m[0]); } catch {} }
-  return null;
+  let obj = null;
+  try { obj = JSON.parse(s); } catch {
+    const m = s.match(/\{[\s\S]*\}/);
+    if (m) { try { obj = JSON.parse(m[0]); } catch {} }
+  }
+  if (!obj) return null;
+
+  // 올바른 최상위 키가 있으면 그대로 반환
+  if (EXPECTED_KEYS.has(Object.keys(obj)[0])) return obj;
+
+  // 래퍼 키 안에 실제 데이터가 있는 경우 언래핑 (최대 2단계)
+  for (const val of Object.values(obj)) {
+    if (val && typeof val === "object" && !Array.isArray(val)) {
+      if (EXPECTED_KEYS.has(Object.keys(val)[0])) return val;
+      for (const inner of Object.values(val)) {
+        if (inner && typeof inner === "object" && !Array.isArray(inner) && EXPECTED_KEYS.has(Object.keys(inner)[0])) return inner;
+      }
+    }
+  }
+
+  return obj; // 언래핑 실패 시 그대로 전달 (normalizeResult에서 기본값 처리)
 }
 
 // 각 필드에 기본값을 보장해 렌더링 오류 방지
 function normalizeResult(parsed) {
+  const normalizeQuiz = (quiz) => Array.isArray(quiz) ? quiz.reduce((acc, q) => {
+    if (!q || typeof q.question !== "string") return acc;
+    if (q.type === "mc") {
+      const correctIdx = Number(q.correct);
+      if (!Array.isArray(q.options) || q.options.length < 4 || !Number.isFinite(correctIdx)) return acc;
+      acc.push({ type: "mc", question: q.question, options: q.options.slice(0, 4).map(String), correct: Math.min(3, Math.max(0, Math.round(correctIdx))), answer: typeof q.answer === "string" ? q.answer : "" });
+    } else {
+      if (typeof q.answer !== "string") return acc;
+      acc.push({ type: "open", question: q.question, answer: q.answer });
+    }
+    return acc;
+  }, []) : [];
+
+  // 새 형식 (sections 기반)
+  if (Array.isArray(parsed.sections)) {
+    return {
+      title: typeof parsed.title === "string" ? parsed.title : "제목 없음",
+      summary: typeof parsed.summary === "string" ? parsed.summary : "",
+      sections: parsed.sections.map((sec) => ({
+        title: typeof sec.title === "string" ? sec.title : "",
+        topics: Array.isArray(sec.topics) ? sec.topics.map((t) => ({
+          title: typeof t.title === "string" ? t.title : "",
+          content: Array.isArray(t.content) ? t.content.filter((c) => typeof c === "string") : [],
+          easyExplanation: typeof t.easyExplanation === "string" ? t.easyExplanation : "",
+        })) : [],
+      })),
+      quiz: normalizeQuiz(parsed.quiz),
+    };
+  }
+
+  // 구 형식 (concepts/keyPoints 기반) — 히스토리 하위 호환
   return {
     title: typeof parsed.title === "string" ? parsed.title : "제목 없음",
     oneLineSummary: typeof parsed.oneLineSummary === "string" ? parsed.oneLineSummary : "",
     summary: Array.isArray(parsed.summary) ? parsed.summary.filter((s) => typeof s === "string") : [],
     concepts: Array.isArray(parsed.concepts) ? parsed.concepts.filter((c) => c && typeof c.term === "string") : [],
     keyPoints: Array.isArray(parsed.keyPoints) ? parsed.keyPoints.filter((k) => typeof k === "string") : [],
-    quiz: Array.isArray(parsed.quiz) ? parsed.quiz.reduce((acc, q) => {
-      if (!q || typeof q.question !== "string") return acc;
-      if (q.type === "mc") {
-        const correctIdx = Number(q.correct);
-        if (!Array.isArray(q.options) || q.options.length < 4 || !Number.isFinite(correctIdx)) return acc;
-        acc.push({ type: "mc", question: q.question, options: q.options.slice(0, 4).map(String), correct: Math.min(3, Math.max(0, Math.round(correctIdx))), answer: typeof q.answer === "string" ? q.answer : "" });
-      } else {
-        if (typeof q.answer !== "string") return acc;
-        acc.push({ type: "open", question: q.question, answer: q.answer });
-      }
-      return acc;
-    }, []) : [],
+    quiz: normalizeQuiz(parsed.quiz),
   };
 }
 
-const FINAL_PROMPT = `아래 학습 자료를 학생이 빠르게 이해·복습할 수 있도록 정리하세요.
+// 1단계: 자유 형식으로 내용 정리
+const DRAFT_PROMPT = `/no_think
 
-출력 규칙 (반드시 준수):
-1. 아래 JSON 구조를 정확히 따른다. 최상위 키는 title, oneLineSummary, summary, concepts, keyPoints, quiz 여섯 개뿐이다.
-2. content, data, result 등 다른 래퍼 키나 중첩 구조를 절대 사용하지 않는다.
-3. 설명 문장, 코드펜스, 주석 없이 JSON만 출력한다.
+당신은 대학 강의 자료를 정리하는 전문 교육 콘텐츠 작성자입니다.
 
-{
-  "title": "문서의 제목 또는 핵심 주제",
-  "oneLineSummary": "문서 전체를 한 문장으로 압축한 요약",
-  "summary": ["핵심 포인트 — 구체적인 내용 포함", "..."],
-  "concepts": [{"term": "핵심 용어", "explanation": "정의와 중요성을 포함한 설명"}],
-  "keyPoints": ["시험·복습에 중요한 암기 포인트", "..."],
-  "quiz": [
-    {"type":"open","question":"주관식 질문","answer":"정답과 해설"},
-    {"type":"mc","question":"객관식 질문","options":["보기1","보기2","보기3","보기4"],"correct":0,"answer":"왜 이 선택지가 정답인지 설명"}
-  ]
-}
+규칙:
+- 학습 자료에 있는 내용만 사용 (추측·창작 금지)
+- 한국어로 작성
+- 자료의 원래 장/절 번호와 제목을 그대로 따라 섹션 구성
+- 각 소주제마다 반드시 ① 핵심 내용(불릿)과 ② 쉬운 설명(이모지+친근한 말투) 두 가지 모두 작성
 
-내용 규칙:
-- summary 5~8개. 각 항목은 단순 키워드가 아니라 내용을 충분히 담은 문장으로 작성한다.
-- concepts 4~8개. explanation은 정의에 그치지 않고 왜 중요한지·어떻게 쓰이는지를 포함한다.
-- keyPoints 3~6개. quiz 4~5개 (open 2개 + mc 2~3개).
-- mc의 correct는 0-based 정수 인덱스(0~3). options는 정확히 4개.
-- mc의 options에는 그럴듯한 오답을 포함해 변별력을 높인다.
-- 모든 설명은 한국어로 작성(전문 용어는 원어 병기 가능).
-- 자료에 실제로 있는 내용에만 근거하고 지어내지 않는다.`;
+출력 형식:
+
+## 제목
+
+## 전체 요약
+(자료 전체를 2~3문장으로 설명)
+
+## 섹션: (원래 장/절 번호와 제목, 예: 01. 소프트웨어의 이해)
+
+### (소주제 이름)
+**내용:**
+- 핵심 정의/개념/절차를 간결한 불릿으로 정리
+- 중요 용어나 수치 포함
+
+**쉬운 설명:**
+(이모지를 사용해 비유·예시로 2~4문장. 친근한 말투로 작성)
+
+### (다음 소주제)
+...
+
+## 섹션: (다음 장/절)
+...
+
+## 퀴즈
+
+### 주관식 1
+질문:
+정답:
+
+### 주관식 2
+질문:
+정답:
+
+### 객관식 1
+질문:
+1.
+2.
+3.
+4.
+정답번호: (1~4)
+해설:
+
+### 객관식 2
+...
+
+### 객관식 3
+...
+
+[학습 자료]`;
+
+// 2단계: 마크다운 → JSON 변환
+const JSON_PROMPT = `/no_think
+아래 학습 정리 내용을 다음 JSON 형식으로 변환하라. 내용을 바꾸지 말고 형식만 변환.
+
+{"title":"제목","summary":"전체 요약 단락","sections":[{"title":"섹션 제목 (예: 01. 소프트웨어의 이해)","topics":[{"title":"소주제명","content":["내용 불릿1","내용 불릿2"],"easyExplanation":"이모지 포함 쉬운 설명 전체 텍스트"}]}],"quiz":[{"type":"open","question":"주관식 질문","answer":"정답"},{"type":"open","question":"주관식 질문2","answer":"정답"},{"type":"mc","question":"객관식 질문","options":["보기1","보기2","보기3","보기4"],"correct":0,"answer":"해설"},{"type":"mc","question":"객관식 질문2","options":["보기1","보기2","보기3","보기4"],"correct":0,"answer":"해설"},{"type":"mc","question":"객관식 질문3","options":["보기1","보기2","보기3","보기4"],"correct":0,"answer":"해설"}]}
+
+규칙:
+- sections는 자료의 원래 장/절 구조를 따름
+- content 배열: 각 불릿을 문자열 요소로
+- easyExplanation: 쉬운 설명 전체 텍스트 (이모지 포함)
+- quiz: open 2개 + mc 3개, correct는 0-based 인덱스(0~3)
+
+[변환할 내용]`;
 
 app.post("/api/summarize", async (req, res) => {
   // SSE 설정
@@ -240,13 +327,15 @@ app.post("/api/summarize", async (req, res) => {
 
     let sourceForFinal;
     if (chunks.length === 1) {
-      send({ type: "progress", step: "map", current: 0, total: 1, message: "내용 분석 중..." });
+      send({ type: "progress", step: "map", current: 0, total: 1, message: "내용 분석 중...", totalTokensUsed: Math.ceil(chunks[0].length / 2.5), contextLength: MODEL_CONTEXT_LENGTH });
       sourceForFinal = chunks[0];
     } else {
-      send({ type: "progress", step: "map", current: 0, total: chunks.length, message: `문서를 ${chunks.length}개 구간으로 나눠 분석합니다...` });
+      const estimatedMapTokens = Math.ceil(chunks.reduce((s, c) => s + c.length, 0) / 2.5);
+      send({ type: "progress", step: "map", current: 0, total: chunks.length, message: `문서를 ${chunks.length}개 구간으로 나눠 분석합니다...`, totalTokensUsed: estimatedMapTokens, contextLength: MODEL_CONTEXT_LENGTH });
 
       // 청크별 요약을 병렬로 처리
       let completed = 0;
+      let totalTokensUsed = 0;
       const partials = await Promise.all(
         chunks.map((chunk, i) =>
           ollamaChat([
@@ -255,9 +344,10 @@ app.post("/api/summarize", async (req, res) => {
               role: "user",
               content: `다음은 문서의 ${i + 1}/${chunks.length} 부분입니다. 중요한 개념·정의·수치·예시·절차를 한국어 불릿(- )으로 빠짐없이 정리하세요. 내용을 압축하거나 생략하지 말고, 뒤 단계에서 활용할 수 있도록 세부 내용을 최대한 보존하세요. 불릿 외 잡담은 하지 마세요.\n\n${chunk}`,
             },
-          ]).then(({ content, tokensPerSec }) => {
+          ]).then(({ content, tokensPerSec, promptEvalCount, evalCount }) => {
             completed++;
-            send({ type: "progress", step: "map", current: completed, total: chunks.length, message: `구간 ${completed}/${chunks.length} 분석 완료`, tokensPerSec });
+            totalTokensUsed += (promptEvalCount || 0) + (evalCount || 0);
+            send({ type: "progress", step: "map", current: completed, total: chunks.length, message: `구간 ${completed}/${chunks.length} 분석 완료`, tokensPerSec, totalTokensUsed, contextLength: MODEL_CONTEXT_LENGTH });
             return clean(content);
           })
         )
@@ -274,11 +364,21 @@ app.post("/api/summarize", async (req, res) => {
       send({ type: "progress", step: "compress", message: `압축 완료 (${Math.round(beforeLen / 1000)}K → ${Math.round(sourceForFinal.length / 1000)}K자)` });
     }
 
-    send({ type: "progress", step: "reduce", message: "최종 정리 중..." });
+    const estimatedTokens = Math.ceil(sourceForFinal.length / 2.5);
+
+    // 1단계: 자유 형식 정리
+    send({ type: "progress", step: "reduce", message: "내용 정리 중...", estimatedTokens, contextLength: MODEL_CONTEXT_LENGTH });
+    const { content: draft } = await ollamaChat([
+      { role: "system", content: "학습 자료 정리 전문가. 지시한 항목 형식으로 상세히 작성." },
+      { role: "user", content: `${DRAFT_PROMPT}\n${sourceForFinal}` },
+    ]);
+
+    // 2단계: JSON 변환
+    send({ type: "progress", step: "reduce", message: "JSON 변환 중..." });
     const { content: raw, promptEvalCount: reducePrompt, evalCount: reduceEval } = await ollamaChat(
       [
-        { role: "system", content: "당신은 학생의 학습을 돕는 전문 튜터입니다. 항상 유효한 JSON만 출력합니다." },
-        { role: "user", content: `${FINAL_PROMPT}\n\n[정리 대상]\n${sourceForFinal}` },
+        { role: "system", content: "JSON converter. Convert the given content into the specified JSON format exactly." },
+        { role: "user", content: `${JSON_PROMPT}\n${clean(draft)}` },
       ],
       { json: true }
     );

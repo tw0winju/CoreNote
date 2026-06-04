@@ -20,23 +20,25 @@ button { font-family: 'IBM Plex Sans KR', sans-serif; cursor: pointer; }
 .qcard:hover { box-shadow: 0 6px 22px -12px rgba(90,60,30,.35); }
 .hist-item:hover { border-color: #b5512a !important; }
 
+.print-only { display: none; }
+
 @media (max-width: 480px) {
   button { padding: 9px 12px !important; font-size: 12px !important; }
 }
 
 @media print {
+  @page { margin: 1.5cm 2cm; }
+
   body { background: white !important; }
   .no-print { display: none !important; }
+  .print-only { display: block !important; }
   .rise { animation: none !important; }
 
-  /* 배경 그라디언트 제거 */
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+
   div[style*="radial-gradient"] { background: white !important; }
 
-  /* 카드 테두리만 남기고 배경 정리 */
   section { break-inside: avoid; }
   h1 { font-size: 28px !important; }
   h2 { font-size: 22px !important; }
-
-  /* 퀴즈 정답 항상 표시 */
-  .quiz-answer { display: block !important; }
 }
