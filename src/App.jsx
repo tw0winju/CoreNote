@@ -416,7 +416,15 @@ export default function App() {
       (result.summary || []).forEach((s, i) => L.push(`${i + 1}. ${s}`));
       L.push(`\n## 주요 개념`);
       (result.concepts || []).forEach((c, i) => {
-        L.push(`**${c.term}**: ${c.explanation}`);
+        if (c.definition) {
+          L.push(`\n### ${c.term}`);
+          L.push(`**정의:** ${c.definition}`);
+          if (c.importance) L.push(`**중요성:** ${c.importance}`);
+          if (c.example) L.push(`**예시:** ${c.example}`);
+          if (c.easyExplanation) L.push(`> 쉬운 설명: ${c.easyExplanation}`);
+        } else {
+          L.push(`**${c.term}**: ${c.explanation || ""}`);
+        }
         if (memos[`c${i}`]) L.push(`  > 메모: ${memos[`c${i}`]}`);
       });
       L.push(`\n## 암기 포인트`);
@@ -763,21 +771,49 @@ export default function App() {
                 </Section>
 
                 <Section title="주요 개념">
-                  <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))" }}>
+                  <div style={{ display: "grid", gap: 16 }}>
                     {(result.concepts || []).map((c, i) => {
                       const key = `c${i}`;
                       return (
-                        <div key={i} style={{ background: C.card, border: `1px solid ${C.line}`, borderRadius: 12, padding: "14px 18px" }}>
-                          <div style={{ fontFamily: serif, fontWeight: 700, fontSize: 16, marginBottom: 4 }}>{c.term}</div>
-                          <div style={{ color: C.inkSoft, fontSize: 14.5, lineHeight: 1.6 }}>{c.explanation}</div>
-                          {memos[key] && editingMemo !== key && (
-                            <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px dashed ${C.line}`, fontSize: 13, color: C.ink, lineHeight: 1.5 }}>{memos[key]}</div>
-                          )}
-                          {editingMemo === key ? (
-                            <textarea className="no-print" autoFocus defaultValue={memos[key] || ""} onBlur={(e) => handleMemoBlur(key, e.target.value)} placeholder="내 메모..." style={{ marginTop: 10, width: "100%", minHeight: 56, resize: "vertical", border: `1px solid ${C.line}`, borderRadius: 8, padding: "7px 10px", fontSize: 13, fontFamily: sans, background: "#fffdf7", color: C.ink, boxSizing: "border-box" }} />
-                          ) : (
-                            <div className="no-print" onClick={() => setEditingMemo(key)} style={{ marginTop: 8, fontSize: 12, color: C.accent, cursor: "pointer", fontStyle: "italic" }}>
-                              {memos[key] ? "✏ 수정" : "+ 메모 추가"}
+                        <div key={i} style={{ border: `1px solid ${C.line}`, borderRadius: 12, overflow: "hidden" }}>
+                          {/* 용어 헤더 */}
+                          <div style={{ background: C.paper2, padding: "10px 18px", borderBottom: `1px solid ${C.line}`, fontFamily: serif, fontWeight: 700, fontSize: 16 }}>
+                            {c.term}
+                          </div>
+                          {/* 내용 */}
+                          <div style={{ padding: "14px 18px", background: C.card }}>
+                            {c.definition ? (
+                              <div style={{ display: "grid", gap: 10 }}>
+                                {[
+                                  { label: "정의", value: c.definition },
+                                  c.importance ? { label: "중요성", value: c.importance } : null,
+                                  c.example ? { label: "예시", value: c.example } : null,
+                                ].filter(Boolean).map(({ label, value }) => (
+                                  <div key={label}>
+                                    <div style={{ fontSize: 11, fontWeight: 700, color: C.accent, letterSpacing: "0.06em", marginBottom: 3 }}>{label}</div>
+                                    <div style={{ color: C.inkSoft, fontSize: 14.5, lineHeight: 1.65 }}>{value}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div style={{ color: C.inkSoft, fontSize: 14.5, lineHeight: 1.6 }}>{c.explanation || ""}</div>
+                            )}
+                            {memos[key] && editingMemo !== key && (
+                              <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px dashed ${C.line}`, fontSize: 13, color: C.ink, lineHeight: 1.5 }}>{memos[key]}</div>
+                            )}
+                            {editingMemo === key ? (
+                              <textarea className="no-print" autoFocus defaultValue={memos[key] || ""} onBlur={(e) => handleMemoBlur(key, e.target.value)} placeholder="내 메모..." style={{ marginTop: 10, width: "100%", minHeight: 56, resize: "vertical", border: `1px solid ${C.line}`, borderRadius: 8, padding: "7px 10px", fontSize: 13, fontFamily: sans, background: "#fffdf7", color: C.ink, boxSizing: "border-box" }} />
+                            ) : (
+                              <div className="no-print" onClick={() => setEditingMemo(key)} style={{ marginTop: 8, fontSize: 12, color: C.accent, cursor: "pointer", fontStyle: "italic" }}>
+                                {memos[key] ? "✏ 수정" : "+ 메모 추가"}
+                              </div>
+                            )}
+                          </div>
+                          {/* 쉬운 설명 */}
+                          {c.easyExplanation && (
+                            <div style={{ background: C.warn, borderTop: `1px dashed ${C.line}`, padding: "12px 18px" }}>
+                              <div style={{ fontSize: 11, fontWeight: 700, color: C.warnText, letterSpacing: "0.06em", marginBottom: 4 }}>쉬운 설명</div>
+                              <div style={{ fontSize: 13.5, lineHeight: 1.75, color: C.warnText }}>{c.easyExplanation}</div>
                             </div>
                           )}
                         </div>

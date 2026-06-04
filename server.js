@@ -196,86 +196,44 @@ function normalizeResult(parsed) {
     title: typeof parsed.title === "string" ? parsed.title : "제목 없음",
     oneLineSummary: typeof parsed.oneLineSummary === "string" ? parsed.oneLineSummary : "",
     summary: Array.isArray(parsed.summary) ? parsed.summary.filter((s) => typeof s === "string") : [],
-    concepts: Array.isArray(parsed.concepts) ? parsed.concepts.filter((c) => c && typeof c.term === "string") : [],
+    concepts: Array.isArray(parsed.concepts) ? parsed.concepts.filter((c) => c && typeof c.term === "string").map((c) => ({
+      term: c.term,
+      // 새 형식(definition 있음) / 구 형식(explanation) 모두 지원
+      ...(typeof c.definition === "string"
+        ? {
+            definition: c.definition,
+            importance: typeof c.importance === "string" ? c.importance : "",
+            example: typeof c.example === "string" ? c.example : "",
+            easyExplanation: typeof c.easyExplanation === "string" ? c.easyExplanation : "",
+          }
+        : { explanation: typeof c.explanation === "string" ? c.explanation : "" }),
+    })) : [],
     keyPoints: Array.isArray(parsed.keyPoints) ? parsed.keyPoints.filter((k) => typeof k === "string") : [],
     quiz: normalizeQuiz(parsed.quiz),
   };
 }
 
-// 1단계: 자유 형식으로 내용 정리
-const DRAFT_PROMPT = `/no_think
+// 학습 자료 → JSON 직접 생성 (단일 단계)
+const FINAL_PROMPT = `/no_think
 
-당신은 대학 강의 자료를 정리하는 전문 교육 콘텐츠 작성자입니다.
+당신은 대학 강의 자료를 분석하는 전문 교육 콘텐츠 작성자입니다.
+아래 학습 자료를 읽고 반드시 유효한 JSON 하나만 출력하세요.
 
-규칙:
-- 학습 자료에 있는 내용만 사용 (추측·창작 금지)
-- 한국어로 작성
-- 자료의 원래 장/절 번호와 제목을 그대로 따라 섹션 구성
-- 각 소주제마다 반드시 ① 핵심 내용(불릿)과 ② 쉬운 설명(이모지+친근한 말투) 두 가지 모두 작성
+절대 규칙:
+1. 제공된 학습 자료에 있는 내용만 사용 — 자료에 없으면 "언급 없음" 기재
+2. JSON 이외의 텍스트 출력 금지 (마크다운 코드블록, 설명, 인사 금지)
+3. 유효한 JSON — 모든 키는 쌍따옴표, 마지막 항목 뒤 쉼표 금지
 
-출력 형식:
+출력 JSON:
+{"title":"자료 제목","oneLineSummary":"자료 전체를 한 문장으로 요약","summary":["완전한 문장 1","완전한 문장 2","완전한 문장 3","완전한 문장 4","완전한 문장 5","완전한 문장 6"],"concepts":[{"term":"용어명","definition":"정의 2문장 이상","importance":"중요성·문제 예방 1문장 이상","example":"구체적 코드·수치·실사례 1문장 이상","easyExplanation":"이모지 포함 비유·예시 2~3문장 친근한 말투"},{"term":"용어명2","definition":"...","importance":"...","example":"...","easyExplanation":"..."},{"term":"용어명3","definition":"...","importance":"...","example":"...","easyExplanation":"..."},{"term":"용어명4","definition":"...","importance":"...","example":"...","easyExplanation":"..."},{"term":"용어명5","definition":"...","importance":"...","example":"...","easyExplanation":"..."}],"keyPoints":["구체적 사실 1","구체적 사실 2","구체적 사실 3","구체적 사실 4","구체적 사실 5"],"quiz":[{"type":"open","question":"주관식 질문1","answer":"정답 + 간략 해설"},{"type":"open","question":"주관식 질문2","answer":"정답 + 간략 해설"},{"type":"mc","question":"객관식 질문1","options":["보기A","보기B","보기C","보기D"],"correct":0,"answer":"해설"},{"type":"mc","question":"객관식 질문2","options":["보기A","보기B","보기C","보기D"],"correct":1,"answer":"해설"},{"type":"mc","question":"객관식 질문3","options":["보기A","보기B","보기C","보기D"],"correct":3,"answer":"해설"}]}
 
-## 제목
-
-## 전체 요약
-(자료 전체를 2~3문장으로 설명)
-
-## 섹션: (원래 장/절 번호와 제목, 예: 01. 소프트웨어의 이해)
-
-### (소주제 이름)
-**내용:**
-- 핵심 정의/개념/절차를 간결한 불릿으로 정리
-- 중요 용어나 수치 포함
-
-**쉬운 설명:**
-(이모지를 사용해 비유·예시로 2~4문장. 친근한 말투로 작성)
-
-### (다음 소주제)
-...
-
-## 섹션: (다음 장/절)
-...
-
-## 퀴즈
-
-### 주관식 1
-질문:
-정답:
-
-### 주관식 2
-질문:
-정답:
-
-### 객관식 1
-질문:
-1.
-2.
-3.
-4.
-정답번호: (1~4)
-해설:
-
-### 객관식 2
-...
-
-### 객관식 3
-...
+각 필드 작성 지침:
+summary: 4~6개. 목차 나열 금지. "X는 Y이고 Z하기 때문에 중요하다" 형태 완전한 문장.
+concepts: 최대 5개. definition·importance·example·easyExplanation 4개 필드 모두 필수 작성.
+keyPoints: 정확히 5개. "가독성", "유지보수성" 같은 추상 표현 금지. 수치·규칙·명칭 등 구체적 사실만.
+quiz MC: 오답은 실제 개념과 혼동하기 쉬운 내용으로 작성. correct 값은 문제마다 자유롭게 결정(0~3).
 
 [학습 자료]`;
-
-// 2단계: 마크다운 → JSON 변환
-const JSON_PROMPT = `/no_think
-아래 학습 정리 내용을 다음 JSON 형식으로 변환하라. 내용을 바꾸지 말고 형식만 변환.
-
-{"title":"제목","summary":"전체 요약 단락","sections":[{"title":"섹션 제목 (예: 01. 소프트웨어의 이해)","topics":[{"title":"소주제명","content":["내용 불릿1","내용 불릿2"],"easyExplanation":"이모지 포함 쉬운 설명 전체 텍스트"}]}],"quiz":[{"type":"open","question":"주관식 질문","answer":"정답"},{"type":"open","question":"주관식 질문2","answer":"정답"},{"type":"mc","question":"객관식 질문","options":["보기1","보기2","보기3","보기4"],"correct":0,"answer":"해설"},{"type":"mc","question":"객관식 질문2","options":["보기1","보기2","보기3","보기4"],"correct":0,"answer":"해설"},{"type":"mc","question":"객관식 질문3","options":["보기1","보기2","보기3","보기4"],"correct":0,"answer":"해설"}]}
-
-규칙:
-- sections는 자료의 원래 장/절 구조를 따름
-- content 배열: 각 불릿을 문자열 요소로
-- easyExplanation: 쉬운 설명 전체 텍스트 (이모지 포함)
-- quiz: open 2개 + mc 3개, correct는 0-based 인덱스(0~3)
-
-[변환할 내용]`;
 
 app.post("/api/summarize", async (req, res) => {
   // SSE 설정
@@ -366,19 +324,12 @@ app.post("/api/summarize", async (req, res) => {
 
     const estimatedTokens = Math.ceil(sourceForFinal.length / 2.5);
 
-    // 1단계: 자유 형식 정리
-    send({ type: "progress", step: "reduce", message: "내용 정리 중...", estimatedTokens, contextLength: MODEL_CONTEXT_LENGTH });
-    const { content: draft } = await ollamaChat([
-      { role: "system", content: "학습 자료 정리 전문가. 지시한 항목 형식으로 상세히 작성." },
-      { role: "user", content: `${DRAFT_PROMPT}\n${sourceForFinal}` },
-    ]);
-
-    // 2단계: JSON 변환
-    send({ type: "progress", step: "reduce", message: "JSON 변환 중..." });
+    // 단일 단계: 학습 자료 → JSON 직접 생성
+    send({ type: "progress", step: "reduce", message: "정리 중...", estimatedTokens, contextLength: MODEL_CONTEXT_LENGTH });
     const { content: raw, promptEvalCount: reducePrompt, evalCount: reduceEval } = await ollamaChat(
       [
-        { role: "system", content: "JSON converter. Convert the given content into the specified JSON format exactly." },
-        { role: "user", content: `${JSON_PROMPT}\n${clean(draft)}` },
+        { role: "system", content: "학습 자료 정리 전문가. 반드시 유효한 JSON만 출력. 다른 텍스트 일절 금지." },
+        { role: "user", content: `${FINAL_PROMPT}\n${sourceForFinal}` },
       ],
       { json: true }
     );

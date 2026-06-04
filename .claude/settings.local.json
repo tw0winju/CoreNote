@@ -9,7 +9,8 @@
       "Bash(node -e ' *)",
       "Bash(node --input-type=module)",
       "Bash(brew install *)",
-      "Bash(pdftotext \"1장 소프트웨어 공학과 개발 프로세스 요약본.pdf\" -)"
+      "Bash(pdftotext \"1장 소프트웨어 공학과 개발 프로세스 요약본.pdf\" -)",
+      "Bash(npx vite *)"
     ]
   }
 }
