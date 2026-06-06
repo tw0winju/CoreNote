@@ -35,7 +35,6 @@ export default function Header({ onSettings }) {
         </h1>
         <p style={{ color: C.inkSoft, fontSize: 15.5, margin: 0, maxWidth: 560, fontFamily: sans }}>
           PDF를 추가해두고, 내 자료 전체에 질문하세요. 관련 부분을 찾아 <b>출처와 함께</b> 답합니다.
-          전부 내 컴퓨터에서 동작해요.
         </p>
       </div>
       <button
