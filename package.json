@@ -1,9 +1,9 @@
 {
   "name": "corenote",
   "private": true,
-  "version": "2.0.0",
+  "version": "3.0.0",
   "type": "module",
-  "description": "PDF를 올리면 로컬 LLM(Ollama)이 요약·핵심개념·암기포인트·복습퀴즈로 정리해주는 학습 도우미 (Windows 10 64bit)",
+  "description": "PDF를 색인해두고 내 자료 전체에 질문하는 로컬 RAG 학습 도우미 (Ollama, Windows 10 64bit)",
   "scripts": {
     "dev": "concurrently -k -n SERVER,WEB -c blue,green \"npm:dev:server\" \"npm:dev:web\"",
     "dev:web": "vite",
