@@ -23,6 +23,9 @@ export default function App() {
   const [askError, setAskError] = useState("");
   const [result, setResult] = useState(null);
   const [openSrc, setOpenSrc] = useState(null);
+  const [conversation, setConversation] = useState([]);
+  const [indexProgress, setIndexProgress] = useState(null);
+  const [selectedDocs, setSelectedDocs] = useState(new Set());
   const inputRef = useRef(null);
 
   const loadDocs = async () => {
@@ -47,43 +50,78 @@ export default function App() {
 
   const uploadFile = (f) => {
     if (!f) return;
-    if (f.type !== "application/pdf") {
-      setIndexError("PDF 파일만 추가할 수 있어요.");
+    const ext = f.name.split(".").pop().toLowerCase();
+    if (!["pdf", "txt", "md", "docx"].includes(ext)) {
+      setIndexError("PDF, TXT, MD, DOCX 파일만 추가할 수 있어요.");
       return;
     }
     setIndexError("");
     setIndexing(true);
-    const reader = new FileReader();
-    reader.onload = async () => {
+    setIndexProgress(null);
+    const fileReader = new FileReader();
+    fileReader.onload = async () => {
       try {
-        const base64 = String(reader.result).split(",")[1];
+        const base64 = String(fileReader.result).split(",")[1];
         const r = await fetch("/api/index", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pdf: base64, filename: f.name }),
+          body: JSON.stringify({ file: base64, filename: f.name }),
         });
-        const d = await r.json();
-        if (!r.ok) throw new Error(d.error || "색인 실패");
-        await loadDocs();
-        await loadHealth();
+        if (!r.ok) {
+          const d = await r.json();
+          throw new Error(d.error || "색인 실패");
+        }
+        const sseReader = r.body.getReader();
+        const decoder = new TextDecoder();
+        let lineBuf = "";
+        while (true) {
+          const { done, value } = await sseReader.read();
+          if (done) break;
+          lineBuf += decoder.decode(value, { stream: true });
+          const lines = lineBuf.split("\n");
+          lineBuf = lines.pop();
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            let event;
+            try { event = JSON.parse(line.slice(6)); } catch { continue; }
+            if (event.type === "progress") {
+              setIndexProgress({ done: event.done, total: event.total });
+            } else if (event.type === "done") {
+              await loadDocs();
+              await loadHealth();
+            } else if (event.type === "error") {
+              throw new Error(event.error);
+            }
+          }
+        }
       } catch (e) {
         setIndexError(e.message || "색인 중 오류가 발생했어요.");
       } finally {
         setIndexing(false);
+        setIndexProgress(null);
       }
     };
-    reader.onerror = () => {
+    fileReader.onerror = () => {
       setIndexError("파일을 읽지 못했어요.");
       setIndexing(false);
     };
-    reader.readAsDataURL(f);
+    fileReader.readAsDataURL(f);
   };
 
   const removeDoc = async (id) => {
     try {
       await fetch(`/api/docs/${id}`, { method: "DELETE" });
+      setSelectedDocs((prev) => { const next = new Set(prev); next.delete(id); return next; });
       await loadDocs();
     } catch {}
+  };
+
+  const toggleDoc = (id) => {
+    setSelectedDocs((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
   };
 
   const ask = async () => {
@@ -97,12 +135,50 @@ export default function App() {
       const r = await fetch("/api/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: q }),
+        body: JSON.stringify({
+          question: q,
+          history: conversation.flatMap(({ q: cq, a: ca }) => [
+            { role: "user", content: cq },
+            { role: "assistant", content: ca },
+          ]),
+          ...(selectedDocs.size > 0 && { docIds: [...selectedDocs] }),
+        }),
       });
-      const d = await r.json();
-      if (!r.ok) throw new Error(d.error || "질문 처리 실패");
-      setResult(d);
+      if (!r.ok) {
+        const d = await r.json();
+        throw new Error(d.error || "질문 처리 실패");
+      }
+      const reader = r.body.getReader();
+      const decoder = new TextDecoder();
+      let lineBuf = "";
+      let answer = "";
+      let sources = [];
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        lineBuf += decoder.decode(value, { stream: true });
+        const lines = lineBuf.split("\n");
+        lineBuf = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          let event;
+          try { event = JSON.parse(line.slice(6)); } catch { continue; }
+          if (event.type === "token") {
+            answer += event.text;
+            setResult((prev) => ({ ...(prev || { sources: [] }), answer }));
+          } else if (event.type === "sources") {
+            sources = event.sources;
+            setResult((prev) => ({ ...(prev || { answer: "" }), sources }));
+          } else if (event.type === "error") {
+            throw new Error(event.error);
+          }
+        }
+      }
+      setConversation((prev) => [...prev, { q, a: answer, sources }]);
+      setResult(null);
+      setQuestion("");
     } catch (e) {
+      setResult(null);
       setAskError(e.message || "질문 처리 중 오류가 발생했어요.");
     } finally {
       setAsking(false);
@@ -175,15 +251,15 @@ export default function App() {
               {indexing ? (
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, color: C.inkSoft, fontSize: 14 }}>
                   <span className="spin" style={{ width: 18, height: 18, border: `2px solid ${C.accentSoft}`, borderTopColor: C.accent, borderRadius: "50%", display: "inline-block" }} />
-                  색인 중…
+                  {indexProgress ? `임베딩 중… (${indexProgress.done}/${indexProgress.total})` : "텍스트 추출 중…"}
                 </div>
               ) : (
                 <div style={{ color: C.inkSoft, fontSize: 14 }}>
-                  <b style={{ color: C.accent }}>＋ PDF 추가</b>
-                  <div style={{ fontSize: 12.5, marginTop: 3 }}>클릭해서 파일 선택</div>
+                  <b style={{ color: C.accent }}>＋ 자료 추가</b>
+                  <div style={{ fontSize: 12.5, marginTop: 3 }}>PDF · TXT · MD · DOCX</div>
                 </div>
               )}
-              <input ref={inputRef} type="file" accept="application/pdf" style={{ display: "none" }} onChange={(e) => uploadFile(e.target.files[0])} />
+              <input ref={inputRef} type="file" accept=".pdf,.txt,.md,.docx" style={{ display: "none" }} onChange={(e) => uploadFile(e.target.files[0])} />
             </div>
             {indexError && <div style={{ color: C.accent, fontSize: 13, marginBottom: 12 }}>{indexError}</div>}
 
@@ -196,16 +272,25 @@ export default function App() {
                   key={d.id}
                   style={{
                     background: C.card,
-                    border: `1px solid ${C.line}`,
+                    border: `1px solid ${selectedDocs.has(d.id) ? C.accent : C.line}`,
                     borderRadius: 10,
                     padding: "11px 13px",
                     display: "flex",
                     alignItems: "center",
-                    justifyContent: "space-between",
                     gap: 10,
                   }}
                 >
-                  <div style={{ minWidth: 0 }}>
+                  <button
+                    onClick={() => toggleDoc(d.id)}
+                    title={selectedDocs.has(d.id) ? "검색 범위 해제" : "이 문서만 검색"}
+                    style={{
+                      width: 16, height: 16, flexShrink: 0, padding: 0, cursor: "pointer",
+                      border: `2px solid ${selectedDocs.has(d.id) ? C.accent : C.line}`,
+                      borderRadius: "50%",
+                      background: selectedDocs.has(d.id) ? C.accent : "transparent",
+                    }}
+                  />
+                  <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ fontSize: 14, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.name}</div>
                     <div style={{ fontSize: 12, color: C.inkSoft }}>{d.chunkCount}개 조각</div>
                   </div>
@@ -225,7 +310,49 @@ export default function App() {
           <section style={{ flex: "1 1 440px", minWidth: 300 }}>
             <h2 style={{ fontFamily: serif, fontSize: 18, fontWeight: 700, margin: "0 0 12px", display: "flex", alignItems: "center", gap: 9 }}>
               <span style={{ width: 6, height: 17, background: C.accent, borderRadius: 3 }} /> 질문하기
+              {conversation.length > 0 && (
+                <button
+                  onClick={() => { setConversation([]); setResult(null); setAskError(""); }}
+                  style={{ marginLeft: "auto", border: "none", background: "transparent", color: C.inkSoft, fontSize: 12.5, cursor: "pointer", padding: "2px 6px", fontFamily: sans }}
+                >
+                  대화 초기화
+                </button>
+              )}
             </h2>
+
+            {conversation.length > 0 && (
+              <div style={{ display: "grid", gap: 16, marginBottom: 20 }}>
+                {conversation.map((item, idx) => (
+                  <div key={idx} style={{ display: "grid", gap: 8 }}>
+                    <div style={{
+                      background: C.paper2, border: `1px solid ${C.line}`,
+                      borderRadius: "12px 12px 4px 12px", padding: "10px 14px",
+                      fontSize: 14, color: C.inkSoft, maxWidth: "88%",
+                      marginLeft: "auto", lineHeight: 1.5,
+                    }}>
+                      {item.q}
+                    </div>
+                    <div style={{
+                      background: C.card, border: `1px solid ${C.line}`,
+                      borderLeft: `4px solid ${C.accentSoft}`,
+                      borderRadius: "0 12px 12px 0", padding: "14px 16px",
+                      fontSize: 15, lineHeight: 1.7, whiteSpace: "pre-wrap",
+                    }}>
+                      {item.a}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {selectedDocs.size > 0 && (
+              <div style={{ fontSize: 12.5, color: C.accent, marginBottom: 8 }}>
+                {selectedDocs.size}개 문서 범위로 검색 중 ·{" "}
+                <span style={{ cursor: "pointer", textDecoration: "underline" }} onClick={() => setSelectedDocs(new Set())}>
+                  전체 해제
+                </span>
+              </div>
+            )}
 
             <textarea
               value={question}
@@ -270,7 +397,7 @@ export default function App() {
             </div>
             {askError && <div style={{ color: C.accent, fontSize: 13.5, marginTop: 12 }}>{askError}</div>}
 
-            {asking && (
+            {asking && !result?.answer && (
               <div className="rise" style={{ textAlign: "center", padding: "38px 0", color: C.inkSoft }}>
                 <span className="spin" style={{ width: 30, height: 30, border: `3px solid ${C.accentSoft}`, borderTopColor: C.accent, borderRadius: "50%", display: "inline-block" }} />
                 <div style={{ fontSize: 13.5, marginTop: 12 }}>관련 부분을 찾아 답을 만드는 중…</div>
