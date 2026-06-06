@@ -1,17 +1,16 @@
-import React from "react";
 import { C, sans } from "../theme";
-import useDocs      from "../hooks/useDocs";
-import useIndexing  from "../hooks/useIndexing";
-import useChat      from "../hooks/useChat";
-import useSettings  from "../hooks/useSettings";
-import Header        from "./Header";
+import useDocs from "../hooks/useDocs";
+import useIndexing from "../hooks/useIndexing";
+import useChat from "../hooks/useChat";
+import useSettings from "../hooks/useSettings";
+import Header from "./Header";
 import WarningBanner from "./WarningBanner";
 import SettingsModal from "./SettingsModal";
-import Library       from "./Library";
-import Chat          from "./Chat";
+import Library from "./Library";
+import Chat from "./Chat";
 
 export default function App() {
-  const docsHook     = useDocs();
+  const docsHook = useDocs();
   const settingsHook = useSettings(docsHook.loadHealth);
   const indexingHook = useIndexing(async () => {
     await docsHook.loadDocs();
@@ -20,9 +19,15 @@ export default function App() {
   const chatHook = useChat();
 
   return (
-    <div style={{ fontFamily: sans, color: C.ink, minHeight: "100vh", background: `radial-gradient(circle at 18% 12%, ${C.paper2}, ${C.paper} 55%)` }}>
+    <div
+      style={{
+        fontFamily: sans,
+        color: C.ink,
+        minHeight: "100vh",
+        background: `radial-gradient(circle at 18% 12%, ${C.paper2}, ${C.paper} 55%)`,
+      }}
+    >
       <div style={{ maxWidth: 1040, margin: "0 auto", padding: "48px 22px 80px" }}>
-
         <Header onSettings={() => settingsHook.setShowSettings(true)} />
 
         {settingsHook.showSettings && settingsHook.settingsForm && (
@@ -38,9 +43,8 @@ export default function App() {
 
         <div style={{ display: "flex", gap: 22, flexWrap: "wrap", alignItems: "flex-start" }}>
           <Library docs={docsHook} indexing={indexingHook} />
-          <Chat    chat={chatHook} docs={docsHook} />
+          <Chat chat={chatHook} docs={docsHook} />
         </div>
-
       </div>
     </div>
   );

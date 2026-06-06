@@ -1,7 +1,8 @@
 // ── 문서 ──────────────────────────────────────────────────────────────────────
-export const fetchDocs    = () => fetch("/api/docs").then((r) => r.json());
-export const fetchHealth  = () => fetch("/api/health").then((r) => r.ok ? r.json() : { ollama: false });
-export const deleteDoc    = (id) => fetch(`/api/docs/${id}`, { method: "DELETE" });
+export const fetchDocs = () => fetch("/api/docs").then((r) => r.json());
+export const fetchHealth = () =>
+  fetch("/api/health").then((r) => (r.ok ? r.json() : { ollama: false }));
+export const deleteDoc = (id) => fetch(`/api/docs/${id}`, { method: "DELETE" });
 export const patchDocName = (id, name) =>
   fetch(`/api/docs/${id}`, {
     method: "PATCH",
@@ -38,7 +39,7 @@ export const postAsk = (question, history, docIds) =>
 
 // ── 설정 ──────────────────────────────────────────────────────────────────────
 export const fetchSettings = () => fetch("/api/settings").then((r) => r.json());
-export const postSettings  = (data) =>
+export const postSettings = (data) =>
   fetch("/api/settings", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -48,7 +49,7 @@ export const postSettings  = (data) =>
 // ── SSE 파서 ──────────────────────────────────────────────────────────────────
 // error 이벤트는 자동으로 throw. 나머지는 handlers[type](event)로 디스패치.
 export async function readSSE(response, handlers) {
-  const reader  = response.body.getReader();
+  const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buf = "";
   while (true) {
@@ -60,7 +61,11 @@ export async function readSSE(response, handlers) {
     for (const line of lines) {
       if (!line.startsWith("data: ")) continue;
       let event;
-      try { event = JSON.parse(line.slice(6)); } catch { continue; }
+      try {
+        event = JSON.parse(line.slice(6));
+      } catch {
+        continue;
+      }
       if (event.type === "error") throw new Error(event.error);
       await handlers[event.type]?.(event);
     }

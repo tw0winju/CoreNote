@@ -53,7 +53,9 @@ function saveSettings() {
 function loadDocs() {
   try {
     if (fs.existsSync(DOCS_PATH)) return JSON.parse(fs.readFileSync(DOCS_PATH, "utf8"));
-  } catch (e) { console.error("[docs load]", e); }
+  } catch (e) {
+    console.error("[docs load]", e);
+  }
   return [];
 }
 let docs = loadDocs();
@@ -84,16 +86,24 @@ if (fs.existsSync(OLD_STORE_PATH)) {
     const old = JSON.parse(fs.readFileSync(OLD_STORE_PATH, "utf8"));
     if (old.chunks?.length) {
       console.log(`[migration] store.json → LanceDB (${old.chunks.length}개 청크)`);
-      await addToTable(old.chunks.map((c) => ({
-        id: c.id, docId: c.docId, docName: c.docName,
-        index: c.index, text: c.text, vector: Array.from(c.embedding),
-      })));
+      await addToTable(
+        old.chunks.map((c) => ({
+          id: c.id,
+          docId: c.docId,
+          docName: c.docName,
+          index: c.index,
+          text: c.text,
+          vector: Array.from(c.embedding),
+        })),
+      );
       docs = old.docs || [];
       saveDocs();
     }
     fs.renameSync(OLD_STORE_PATH, OLD_STORE_PATH + ".migrated");
     console.log("[migration] 완료");
-  } catch (e) { console.error("[migration error]", e); }
+  } catch (e) {
+    console.error("[migration error]", e);
+  }
 }
 
 // ---------- 유틸 ----------
@@ -107,23 +117,35 @@ function chunkText(text, maxChars) {
   const chunks = [];
   let cur = "";
   for (const p of paragraphs) {
-    if (cur && cur.length + 2 + p.length > maxChars) { chunks.push(cur.trim()); cur = p; }
-    else cur = cur ? cur + "\n\n" + p : p;
+    if (cur && cur.length + 2 + p.length > maxChars) {
+      chunks.push(cur.trim());
+      cur = p;
+    } else cur = cur ? cur + "\n\n" + p : p;
   }
   if (cur.trim()) chunks.push(cur.trim());
   return chunks;
 }
 
 function cosine(a, b) {
-  let dot = 0, na = 0, nb = 0;
-  for (let i = 0; i < a.length; i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
+  let dot = 0,
+    na = 0,
+    nb = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    na += a[i] * a[i];
+    nb += b[i] * b[i];
+  }
   return dot / (Math.sqrt(na) * Math.sqrt(nb) + 1e-8);
 }
 
 async function extractText(base64, filename = "") {
   const ext = path.extname(filename).toLowerCase();
   const buf = Buffer.from(base64, "base64");
-  const normalize = (s) => s.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  const normalize = (s) =>
+    s
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
   if (ext === ".txt" || ext === ".md") return normalize(buf.toString("utf8"));
   if (ext === ".docx") {
     const { extractRawText } = await import("mammoth");
@@ -151,11 +173,15 @@ async function extractTextOCR(buf, onProgress) {
       const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
       const ctx = canvas.getContext("2d");
       await page.render({ canvasContext: ctx, viewport }).promise;
-      const { data: { text } } = await worker.recognize(canvas.toBuffer("image/png"));
+      const {
+        data: { text },
+      } = await worker.recognize(canvas.toBuffer("image/png"));
       fullText += text + "\n\n";
       if (onProgress) onProgress(pageNum, numPages);
     }
-  } finally { await worker.terminate(); }
+  } finally {
+    await worker.terminate();
+  }
   return fullText.trim();
 }
 
@@ -170,7 +196,7 @@ async function ollamaFetch(pathname, body) {
     });
   } catch (e) {
     const code = e?.cause?.code || e?.code || "";
-    throw new Error(code === "ECONNREFUSED" ? "OLLAMA_DOWN" : "OLLAMA_FETCH");
+    throw new Error(code === "ECONNREFUSED" ? "OLLAMA_DOWN" : "OLLAMA_FETCH", { cause: e });
   }
   return res;
 }
@@ -187,14 +213,19 @@ async function embed(input) {
 
 // ---------- BM25 + RRF ----------
 function tokenize(text) {
-  return text.toLowerCase().replace(/[^\w\s一-鿿가-힯]/g, " ").split(/\s+/).filter(Boolean);
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s一-鿿가-힯]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
 }
 
 function bm25Scores(query, chunks, k1 = 1.5, b = 0.75) {
   const qTerms = new Set(tokenize(query));
   if (!qTerms.size) return chunks.map(() => 0);
   const tok = chunks.map((c) => {
-    const t = tokenize(c.text); const f = {};
+    const t = tokenize(c.text);
+    const f = {};
     for (const w of t) f[w] = (f[w] || 0) + 1;
     return { f, len: t.length };
   });
@@ -205,7 +236,8 @@ function bm25Scores(query, chunks, k1 = 1.5, b = 0.75) {
   return tok.map(({ f, len }) => {
     let score = 0;
     for (const term of qTerms) {
-      const freq = f[term] || 0; if (!freq) continue;
+      const freq = f[term] || 0;
+      if (!freq) continue;
       const idf = Math.log((N - df[term] + 0.5) / (df[term] + 0.5) + 1);
       score += (idf * (freq * (k1 + 1))) / (freq + k1 * (1 - b + (b * len) / avgdl));
     }
@@ -216,7 +248,9 @@ function bm25Scores(query, chunks, k1 = 1.5, b = 0.75) {
 function rankOf(scores) {
   const order = [...scores.keys()].sort((a, b) => scores[b] - scores[a]);
   const rank = new Array(scores.length);
-  order.forEach((idx, r) => { rank[idx] = r; });
+  order.forEach((idx, r) => {
+    rank[idx] = r;
+  });
   return rank;
 }
 
@@ -232,15 +266,30 @@ async function llmRerank(question, candidates) {
       options: { temperature: 0 },
     });
     if (!res.ok) return null;
-    const raw = ((await res.json()).message?.content || "").replace(/<think>[\s\S]*?<\/think>/g, "");
-    const order = raw.match(/\d+/g)?.map(Number).filter((n) => n >= 1 && n <= candidates.length);
+    const raw = ((await res.json()).message?.content || "").replace(
+      /<think>[\s\S]*?<\/think>/g,
+      "",
+    );
+    const order = raw
+      .match(/\d+/g)
+      ?.map(Number)
+      .filter((n) => n >= 1 && n <= candidates.length);
     if (!order?.length) return null;
     const seen = new Set();
     const reranked = [];
-    for (const idx of order) { if (!seen.has(idx - 1)) { seen.add(idx - 1); reranked.push(candidates[idx - 1]); } }
-    for (let i = 0; i < candidates.length; i++) { if (!seen.has(i)) reranked.push(candidates[i]); }
+    for (const idx of order) {
+      if (!seen.has(idx - 1)) {
+        seen.add(idx - 1);
+        reranked.push(candidates[idx - 1]);
+      }
+    }
+    for (let i = 0; i < candidates.length; i++) {
+      if (!seen.has(i)) reranked.push(candidates[i]);
+    }
     return reranked;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 // ---------- 공통 색인 로직 ----------
@@ -256,7 +305,16 @@ async function indexTextSSE(text, name, hash, send) {
   for (let i = 0; i < chunks.length; i += BATCH) {
     const batch = chunks.slice(i, i + BATCH);
     const vecs = await embed(batch);
-    batch.forEach((t, j) => records.push({ id: crypto.randomUUID(), docId, docName: name, index: i + j, text: t, vector: vecs[j] }));
+    batch.forEach((t, j) =>
+      records.push({
+        id: crypto.randomUUID(),
+        docId,
+        docName: name,
+        index: i + j,
+        text: t,
+        vector: vecs[j],
+      }),
+    );
     send({ type: "progress", done: Math.min(i + BATCH, total), total });
   }
   await addToTable(records);
@@ -271,7 +329,10 @@ function sseErr(send, e) {
   if (m === "OLLAMA_DOWN" || m === "OLLAMA_FETCH")
     send({ type: "error", error: "Ollama 서버에 연결할 수 없습니다. 실행 중인지 확인하세요." });
   else if (m === "EMBED_MODEL_MISSING")
-    send({ type: "error", error: `임베딩 모델(${settings.embedModel})이 없습니다. 'ollama pull ${settings.embedModel}' 을 실행하세요.` });
+    send({
+      type: "error",
+      error: `임베딩 모델(${settings.embedModel})이 없습니다. 'ollama pull ${settings.embedModel}' 을 실행하세요.`,
+    });
   else send({ type: "error", error: "처리 중 오류가 발생했습니다." });
 }
 
@@ -289,8 +350,12 @@ app.post("/api/index", async (req, res) => {
   const buf = Buffer.from(fileData, "base64");
 
   let text;
-  try { text = await extractText(fileData, filename || ""); }
-  catch (e) { console.error("[extract]", e); return res.status(422).json({ error: "파일에서 텍스트를 추출하지 못했습니다." }); }
+  try {
+    text = await extractText(fileData, filename || "");
+  } catch (e) {
+    console.error("[extract]", e);
+    return res.status(422).json({ error: "파일에서 텍스트를 추출하지 못했습니다." });
+  }
 
   const needsOCR = text.length < 30 && ext === ".pdf";
   if (!needsOCR && text.length < 30)
@@ -309,13 +374,26 @@ app.post("/api/index", async (req, res) => {
         text = await extractTextOCR(buf, (cur, total) => {
           send({ type: "status", message: `OCR 중… (${cur}/${total} 페이지)` });
         });
-      } catch (e) { console.error("[ocr]", e); send({ type: "error", error: "OCR 처리 중 오류가 발생했습니다." }); return res.end(); }
-      if (text.length < 30) { send({ type: "error", error: "OCR로도 텍스트를 추출하지 못했습니다. 이미지 품질을 확인하세요." }); return res.end(); }
+      } catch (e) {
+        console.error("[ocr]", e);
+        send({ type: "error", error: "OCR 처리 중 오류가 발생했습니다." });
+        return res.end();
+      }
+      if (text.length < 30) {
+        send({
+          type: "error",
+          error: "OCR로도 텍스트를 추출하지 못했습니다. 이미지 품질을 확인하세요.",
+        });
+        return res.end();
+      }
     }
     const { docId, chunkCount } = await indexTextSSE(text, filename || "문서", hash, send);
     send({ type: "done", docId, name: filename || "문서", chunkCount });
     res.end();
-  } catch (e) { sseErr(send, e); res.end(); }
+  } catch (e) {
+    sseErr(send, e);
+    res.end();
+  }
 });
 
 // ---------- 2) URL 색인 ----------
@@ -331,7 +409,9 @@ app.post("/api/index-url", async (req, res) => {
     });
     if (!r.ok) return res.status(422).json({ error: `URL 응답 오류 (${r.status})` });
     html = await r.text();
-  } catch { return res.status(422).json({ error: "URL을 불러오지 못했습니다." }); }
+  } catch {
+    return res.status(422).json({ error: "URL을 불러오지 못했습니다." });
+  }
 
   const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
   const title = titleMatch ? titleMatch[1].trim().slice(0, 80) : new URL(url.trim()).hostname;
@@ -340,11 +420,17 @@ app.post("/api/index-url", async (req, res) => {
     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, " ")
     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, " ")
     .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'")
-    .replace(/\s+/g, " ").trim();
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
 
-  if (text.length < 30) return res.status(422).json({ error: "페이지에서 텍스트를 추출하지 못했습니다." });
+  if (text.length < 30)
+    return res.status(422).json({ error: "페이지에서 텍스트를 추출하지 못했습니다." });
 
   const hash = crypto.createHash("sha256").update(text).digest("hex");
   const dup = docs.find((d) => d.hash === hash);
@@ -360,7 +446,10 @@ app.post("/api/index-url", async (req, res) => {
     const { docId, chunkCount } = await indexTextSSE(text, title, hash, send);
     send({ type: "done", docId, name: title, chunkCount });
     res.end();
-  } catch (e) { sseErr(send, e); res.end(); }
+  } catch (e) {
+    sseErr(send, e);
+    res.end();
+  }
 });
 
 // ---------- 3) 자료 목록 / 이름 변경 / 삭제 ----------
@@ -380,8 +469,12 @@ app.patch("/api/docs/:id", (req, res) => {
 
 app.delete("/api/docs/:id", async (req, res) => {
   const id = req.params.id;
-  try { const table = await getTable(); if (table) await table.delete(`docId = '${id}'`); }
-  catch (e) { console.error("[delete chunks]", e); }
+  try {
+    const table = await getTable();
+    if (table) await table.delete(`docId = '${id}'`);
+  } catch (e) {
+    console.error("[delete chunks]", e);
+  }
   docs = docs.filter((d) => d.id !== id);
   saveDocs();
   res.json({ ok: true });
@@ -415,7 +508,10 @@ app.post("/api/ask", async (req, res) => {
 
   try {
     const table = await getTable();
-    if (!table) { send({ type: "error", error: "먼저 문서를 추가하세요." }); return res.end(); }
+    if (!table) {
+      send({ type: "error", error: "먼저 문서를 추가하세요." });
+      return res.end();
+    }
 
     // F: HyDE — 가상 답변을 임베딩해 검색 정확도 향상
     let queryText = question;
@@ -424,7 +520,10 @@ app.post("/api/ask", async (req, res) => {
         const hydeRes = await ollamaFetch("/api/chat", {
           model: settings.chatModel,
           messages: [
-            { role: "system", content: "사용자 질문에 대해 간결하게 한 문단으로 가상 답변을 작성하시오." },
+            {
+              role: "system",
+              content: "사용자 질문에 대해 간결하게 한 문단으로 가상 답변을 작성하시오.",
+            },
             { role: "user", content: question },
           ],
           stream: false,
@@ -437,7 +536,8 @@ app.post("/api/ask", async (req, res) => {
     const qvec = (await embed(queryText))[0];
 
     let search = table.vectorSearch(qvec).limit(settings.topK * 4);
-    if (docIds?.length > 0) search = search.where(docIds.map((id) => `docId = '${id}'`).join(" OR "));
+    if (docIds?.length > 0)
+      search = search.where(docIds.map((id) => `docId = '${id}'`).join(" OR "));
     let candidates = await search.toArray();
 
     if (candidates.length === 0) {
@@ -452,8 +552,10 @@ app.post("/api/ask", async (req, res) => {
     const cosRank = rankOf(cosScores);
     const bm25Rank = rankOf(bm25);
     const rrf = candidates.map((_, i) => 1 / (K + cosRank[i]) + 1 / (K + bm25Rank[i]));
-    candidates = [...candidates.keys()].sort((a, b) => rrf[b] - rrf[a])
-      .slice(0, settings.topK * 2).map((i) => candidates[i]);
+    candidates = [...candidates.keys()]
+      .sort((a, b) => rrf[b] - rrf[a])
+      .slice(0, settings.topK * 2)
+      .map((i) => candidates[i]);
 
     // G: LLM 재순위화 (선택적)
     if (settings.rerankEnabled && candidates.length > 1) {
@@ -462,7 +564,8 @@ app.post("/api/ask", async (req, res) => {
     }
 
     const scored = candidates.slice(0, settings.topK).map((c) => ({
-      c, score: cosine(qvec, Array.from(c.vector)),
+      c,
+      score: cosine(qvec, Array.from(c.vector)),
     }));
 
     // 출처 먼저 전송
@@ -504,25 +607,42 @@ ${question}`;
     if (!ollamaRes.ok) {
       const b = await ollamaRes.text().catch(() => "");
       if (ollamaRes.status === 404 || /not found|pull/i.test(b))
-        send({ type: "error", error: `모델(${settings.chatModel})이 없습니다. 'ollama pull ${settings.chatModel}' 을 실행하세요.` });
+        send({
+          type: "error",
+          error: `모델(${settings.chatModel})이 없습니다. 'ollama pull ${settings.chatModel}' 을 실행하세요.`,
+        });
       else send({ type: "error", error: "처리 중 오류가 발생했습니다." });
       return res.end();
     }
 
     // <think> 블록 실시간 필터
-    let inThink = false, tail = "";
+    let inThink = false,
+      tail = "";
     const processToken = (token) => {
       tail += token;
       let out = "";
       while (tail) {
         if (inThink) {
           const i = tail.indexOf("</think>");
-          if (i !== -1) { inThink = false; tail = tail.slice(i + 8); }
-          else { tail = tail.slice(Math.max(0, tail.length - 7)); break; }
+          if (i !== -1) {
+            inThink = false;
+            tail = tail.slice(i + 8);
+          } else {
+            tail = tail.slice(Math.max(0, tail.length - 7));
+            break;
+          }
         } else {
           const i = tail.indexOf("<think>");
-          if (i !== -1) { out += tail.slice(0, i); inThink = true; tail = tail.slice(i + 7); }
-          else { const safe = Math.max(0, tail.length - 6); out += tail.slice(0, safe); tail = tail.slice(safe); break; }
+          if (i !== -1) {
+            out += tail.slice(0, i);
+            inThink = true;
+            tail = tail.slice(i + 7);
+          } else {
+            const safe = Math.max(0, tail.length - 6);
+            out += tail.slice(0, safe);
+            tail = tail.slice(safe);
+            break;
+          }
         }
       }
       const cleaned = out.replace(/```(?:\w+\n?)?/g, "");
@@ -536,15 +656,25 @@ ${question}`;
       const { done, value } = await reader.read();
       if (done) break;
       lineBuf += decoder.decode(value, { stream: true });
-      const lines = lineBuf.split("\n"); lineBuf = lines.pop();
+      const lines = lineBuf.split("\n");
+      lineBuf = lines.pop();
       for (const line of lines) {
         if (!line.trim()) continue;
-        try { const chunk = JSON.parse(line); if (chunk.message?.content) processToken(chunk.message.content); } catch {}
+        try {
+          const chunk = JSON.parse(line);
+          if (chunk.message?.content) processToken(chunk.message.content);
+        } catch {}
       }
     }
-    if (!inThink && tail) { const c = tail.replace(/```(?:\w+\n?)?/g, ""); if (c) send({ type: "token", text: c }); }
+    if (!inThink && tail) {
+      const c = tail.replace(/```(?:\w+\n?)?/g, "");
+      if (c) send({ type: "token", text: c });
+    }
     res.end();
-  } catch (e) { sseErr(send, e); res.end(); }
+  } catch (e) {
+    sseErr(send, e);
+    res.end();
+  }
 });
 
 // ---------- 헬스 체크 ----------
@@ -556,11 +686,15 @@ app.get("/api/health", async (_req, res) => {
     const has = (m) => names.some((n) => n === m || n.startsWith(m.split(":")[0]));
     res.json({
       ollama: true,
-      chatModel: settings.chatModel, embedModel: settings.embedModel,
-      chatInstalled: has(settings.chatModel), embedInstalled: has(settings.embedModel),
+      chatModel: settings.chatModel,
+      embedModel: settings.embedModel,
+      chatInstalled: has(settings.chatModel),
+      embedInstalled: has(settings.embedModel),
       docCount: docs.length,
     });
-  } catch { res.status(503).json({ ollama: false }); }
+  } catch {
+    res.status(503).json({ ollama: false });
+  }
 });
 
 // ---------- 프로덕션 정적 서빙 ----------
@@ -572,5 +706,7 @@ if (fs.existsSync(dist)) {
 
 app.listen(PORT, () => {
   console.log(`코어노트(RAG) 서버 실행 중 -> http://localhost:${PORT}`);
-  console.log(`Ollama: ${OLLAMA_URL} | 답변: ${settings.chatModel} | 임베딩: ${settings.embedModel}`);
+  console.log(
+    `Ollama: ${OLLAMA_URL} | 답변: ${settings.chatModel} | 임베딩: ${settings.embedModel}`,
+  );
 });

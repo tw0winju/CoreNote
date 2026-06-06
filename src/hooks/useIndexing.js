@@ -2,25 +2,40 @@ import { useState } from "react";
 import { postIndexFile, postIndexUrl, readSSE } from "../api";
 
 export default function useIndexing(onIndexed) {
-  const [indexing,      setIndexing]      = useState(false);
-  const [indexError,    setIndexError]    = useState("");
-  const [indexStatus,   setIndexStatus]   = useState("");
+  const [indexing, setIndexing] = useState(false);
+  const [indexError, setIndexError] = useState("");
+  const [indexStatus, setIndexStatus] = useState("");
   const [indexProgress, setIndexProgress] = useState(null);
-  const [uploadMode,    setUploadMode]    = useState("file");
-  const [urlInput,      setUrlInput]      = useState("");
+  const [uploadMode, setUploadMode] = useState("file");
+  const [urlInput, setUrlInput] = useState("");
 
-  const begin = () => { setIndexing(true); setIndexError(""); setIndexProgress(null); setIndexStatus(""); };
-  const end   = () => { setIndexing(false); setIndexProgress(null); setIndexStatus(""); };
+  const begin = () => {
+    setIndexing(true);
+    setIndexError("");
+    setIndexProgress(null);
+    setIndexStatus("");
+  };
+  const end = () => {
+    setIndexing(false);
+    setIndexProgress(null);
+    setIndexStatus("");
+  };
 
   const run = async (fetchFn, onSuccess) => {
     begin();
     try {
       const r = await fetchFn();
-      if (!r.ok) { const d = await r.json(); throw new Error(d.error || "색인 실패"); }
+      if (!r.ok) {
+        const d = await r.json();
+        throw new Error(d.error || "색인 실패");
+      }
       await readSSE(r, {
-        progress: (e) => { setIndexStatus(""); setIndexProgress({ done: e.done, total: e.total }); },
-        status:   (e) => setIndexStatus(e.message),
-        done:     async () => await onIndexed(),
+        progress: (e) => {
+          setIndexStatus("");
+          setIndexProgress({ done: e.done, total: e.total });
+        },
+        status: (e) => setIndexStatus(e.message),
+        done: async () => await onIndexed(),
       });
       onSuccess?.();
     } catch (e) {
@@ -38,7 +53,7 @@ export default function useIndexing(onIndexed) {
       return;
     }
     const reader = new FileReader();
-    reader.onload  = () => run(() => postIndexFile(String(reader.result).split(",")[1], f.name));
+    reader.onload = () => run(() => postIndexFile(String(reader.result).split(",")[1], f.name));
     reader.onerror = () => setIndexError("파일을 읽지 못했어요.");
     reader.readAsDataURL(f);
   };
@@ -46,18 +61,27 @@ export default function useIndexing(onIndexed) {
   const uploadUrl = () => {
     const url = urlInput.trim();
     if (!url) return;
-    run(() => postIndexUrl(url), () => setUrlInput(""));
+    run(
+      () => postIndexUrl(url),
+      () => setUrlInput(""),
+    );
   };
 
-  const spinnerMsg = indexStatus
-    || (indexProgress
+  const spinnerMsg =
+    indexStatus ||
+    (indexProgress
       ? `임베딩 중… (${indexProgress.done}/${indexProgress.total})`
       : "텍스트 추출 중…");
 
   return {
-    indexing, indexError, spinnerMsg,
-    uploadMode, setUploadMode,
-    urlInput, setUrlInput,
-    uploadFile, uploadUrl,
+    indexing,
+    indexError,
+    spinnerMsg,
+    uploadMode,
+    setUploadMode,
+    urlInput,
+    setUrlInput,
+    uploadFile,
+    uploadUrl,
   };
 }

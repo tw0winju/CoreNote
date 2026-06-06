@@ -6,10 +6,14 @@ export default function useSettings(onSaved) {
   const [settingsForm, setSettingsForm] = useState(null);
 
   const load = async () => {
-    try { setSettingsForm(await fetchSettings()); } catch {}
+    try {
+      setSettingsForm(await fetchSettings());
+    } catch {}
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, []);
 
   const save = async () => {
     try {
