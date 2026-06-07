@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { C, sans, serif } from "../theme";
+import { C, sans } from "../theme";
 
 function CopyButton({ text, id, copiedKey, onCopy }) {
   return (
@@ -82,95 +82,6 @@ function SourceCard({ s, isOpen, onToggle }) {
   );
 }
 
-function SessionsPanel({ sessions, onLoad, onDelete }) {
-  if (sessions.length === 0)
-    return (
-      <div style={{ padding: "12px 0 8px", fontSize: 13, color: C.inkSoft }}>
-        저장된 세션이 없어요.
-      </div>
-    );
-
-  return (
-    <div
-      style={{
-        maxHeight: 220,
-        overflowY: "auto",
-        display: "grid",
-        gap: 6,
-        padding: "8px 0",
-      }}
-    >
-      {sessions.map((s) => (
-        <div
-          key={s.id}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            padding: "8px 12px",
-            background: C.card,
-            border: `1px solid ${C.line}`,
-            borderRadius: 9,
-          }}
-        >
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div
-              style={{
-                fontSize: 13,
-                fontWeight: 500,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {s.name}
-            </div>
-            <div style={{ fontSize: 11, color: C.inkSoft }}>
-              {new Date(s.savedAt).toLocaleString("ko-KR", {
-                month: "numeric",
-                day: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-              })}{" "}
-              · {s.conversation.length}턴
-            </div>
-          </div>
-          <button
-            onClick={() => onLoad(s)}
-            style={{
-              border: `1px solid ${C.line}`,
-              background: "transparent",
-              padding: "3px 10px",
-              borderRadius: 6,
-              fontSize: 12,
-              cursor: "pointer",
-              fontFamily: sans,
-              flexShrink: 0,
-            }}
-          >
-            불러오기
-          </button>
-          <button
-            onClick={() => onDelete(s.id)}
-            style={{
-              border: "none",
-              background: "transparent",
-              color: C.inkSoft,
-              fontSize: 16,
-              lineHeight: 1,
-              cursor: "pointer",
-              padding: "0 2px",
-              flexShrink: 0,
-            }}
-          >
-            ×
-          </button>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 export default function Chat({ chat, docs: docsHook }) {
   const {
     question,
@@ -189,16 +100,6 @@ export default function Chat({ chat, docs: docsHook }) {
     clearConversation,
     ask,
     scrollRef,
-    sessions,
-    showSessions,
-    setShowSessions,
-    savingName,
-    setSavingName,
-    showSaveInput,
-    setShowSaveInput,
-    saveSession,
-    loadSession,
-    deleteSession,
   } = chat;
 
   const { selectedDocs, docs, setSelectedDocs } = docsHook;
@@ -219,172 +120,47 @@ export default function Chat({ chat, docs: docsHook }) {
       }}
     >
       {/* ── 헤더 ── */}
-      <div style={{ flexShrink: 0 }}>
-        <h2
+      {conversation.length > 0 && (
+        <div
           style={{
-            fontFamily: serif,
-            fontSize: 18,
-            fontWeight: 700,
-            margin: "0 0 10px",
+            flexShrink: 0,
             display: "flex",
-            alignItems: "center",
-            gap: 9,
-            flexWrap: "wrap",
+            justifyContent: "flex-end",
+            gap: 6,
+            marginBottom: 8,
           }}
         >
-          <span style={{ width: 6, height: 17, background: C.accent, borderRadius: 3 }} />
-          질문하기
-          <div style={{ marginLeft: "auto", display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {/* 세션 저장 */}
-            {conversation.length > 0 && (
-              <>
-                {showSaveInput ? (
-                  <div style={{ display: "flex", gap: 5 }}>
-                    <input
-                      autoFocus
-                      value={savingName}
-                      onChange={(e) => setSavingName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") saveSession();
-                        if (e.key === "Escape") {
-                          setShowSaveInput(false);
-                          setSavingName("");
-                        }
-                      }}
-                      placeholder="세션 이름"
-                      style={{
-                        padding: "2px 8px",
-                        borderRadius: 6,
-                        border: `1px solid ${C.accent}`,
-                        fontFamily: sans,
-                        fontSize: 12.5,
-                        background: C.card,
-                        outline: "none",
-                        width: 120,
-                      }}
-                    />
-                    <button
-                      onClick={saveSession}
-                      style={{
-                        border: "none",
-                        background: C.ink,
-                        color: C.paper,
-                        padding: "2px 8px",
-                        borderRadius: 6,
-                        fontSize: 12.5,
-                        cursor: "pointer",
-                        fontFamily: sans,
-                      }}
-                    >
-                      저장
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowSaveInput(false);
-                        setSavingName("");
-                      }}
-                      style={{
-                        border: `1px solid ${C.line}`,
-                        background: "transparent",
-                        padding: "2px 7px",
-                        borderRadius: 6,
-                        fontSize: 12.5,
-                        cursor: "pointer",
-                        fontFamily: sans,
-                      }}
-                    >
-                      취소
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setShowSaveInput(true)}
-                    style={{
-                      border: `1px solid ${C.line}`,
-                      background: "transparent",
-                      color: C.inkSoft,
-                      fontSize: 12.5,
-                      cursor: "pointer",
-                      padding: "2px 8px",
-                      fontFamily: sans,
-                      borderRadius: 6,
-                    }}
-                  >
-                    💾 세션 저장
-                  </button>
-                )}
-              </>
-            )}
-
-            {/* 세션 목록 */}
-            <button
-              onClick={() => setShowSessions((v) => !v)}
-              style={{
-                border: `1px solid ${showSessions ? C.accent : C.line}`,
-                background: showSessions ? C.accentSoft : "transparent",
-                color: showSessions ? C.accent : C.inkSoft,
-                fontSize: 12.5,
-                cursor: "pointer",
-                padding: "2px 8px",
-                fontFamily: sans,
-                borderRadius: 6,
-              }}
-            >
-              📋 세션 {sessions.length > 0 ? `(${sessions.length})` : ""}
-            </button>
-
-            {conversation.length > 0 && (
-              <>
-                <button
-                  onClick={exportConversation}
-                  style={{
-                    border: `1px solid ${C.line}`,
-                    background: "transparent",
-                    color: C.inkSoft,
-                    fontSize: 12.5,
-                    cursor: "pointer",
-                    padding: "2px 8px",
-                    fontFamily: sans,
-                    borderRadius: 6,
-                  }}
-                >
-                  내보내기
-                </button>
-                <button
-                  onClick={clearConversation}
-                  style={{
-                    border: "none",
-                    background: "transparent",
-                    color: C.inkSoft,
-                    fontSize: 12.5,
-                    cursor: "pointer",
-                    padding: "2px 6px",
-                    fontFamily: sans,
-                  }}
-                >
-                  초기화
-                </button>
-              </>
-            )}
-          </div>
-        </h2>
-
-        {/* 세션 목록 패널 */}
-        {showSessions && (
-          <div
+          <button
+            onClick={exportConversation}
             style={{
-              marginBottom: 12,
-              padding: "10px 14px",
-              background: C.paper2,
               border: `1px solid ${C.line}`,
-              borderRadius: 12,
+              background: "transparent",
+              color: C.inkSoft,
+              fontSize: 12.5,
+              cursor: "pointer",
+              padding: "3px 9px",
+              fontFamily: sans,
+              borderRadius: 6,
             }}
           >
-            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>저장된 세션</div>
-            <SessionsPanel sessions={sessions} onLoad={loadSession} onDelete={deleteSession} />
-          </div>
-        )}
-      </div>
+            내보내기
+          </button>
+          <button
+            onClick={clearConversation}
+            style={{
+              border: "none",
+              background: "transparent",
+              color: C.inkSoft,
+              fontSize: 12.5,
+              cursor: "pointer",
+              padding: "3px 7px",
+              fontFamily: sans,
+            }}
+          >
+            초기화
+          </button>
+        </div>
+      )}
 
       {/* ── 대화 스크롤 영역 ── */}
       <div
