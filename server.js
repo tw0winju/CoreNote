@@ -429,12 +429,16 @@ app.post("/api/index", async (req, res) => {
   const docName =
     pageFrom || pageTo ? `${baseName} (${pageFrom ?? 1}~${pageTo ?? "끝"}페이지)` : baseName;
 
-  let text;
+  let text = "";
   try {
     text = await extractText(fileData, filename || "", pageFrom ?? null, pageTo ?? null);
   } catch (e) {
-    console.error("[extract]", e);
-    return res.status(422).json({ error: "파일에서 텍스트를 추출하지 못했습니다." });
+    if (ext !== ".pdf") {
+      console.error("[extract]", e);
+      return res.status(422).json({ error: "파일에서 텍스트를 추출하지 못했습니다." });
+    }
+    // 스캔 PDF 등 구조 파싱 실패 → OCR로 넘김
+    console.warn("[extract] PDF 텍스트 추출 실패, OCR 시도:", e.message);
   }
 
   const needsOCR = text.length < 30 && ext === ".pdf";
