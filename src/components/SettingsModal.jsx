@@ -99,6 +99,11 @@ export default function SettingsModal({ form, setForm, onSave, onClose }) {
             label: "LLM 재순위화",
             desc: "검색 결과를 LLM으로 재정렬합니다. 추가 LLM 호출이 발생합니다.",
           },
+          {
+            key: "memoryEnabled",
+            label: "대화 기억",
+            desc: "대화 후 중요한 내용을 자동으로 기억해 다음 대화에 활용합니다.",
+          },
         ].map(({ key, label, desc }) => (
           <div
             key={key}

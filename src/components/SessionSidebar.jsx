@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { C, sans, serif } from "../theme";
+import MemoryPanel from "./MemoryPanel";
 
-export default function SessionSidebar({ chat }) {
+export default function SessionSidebar({ chat, memory }) {
   const {
     conversation,
     sessions,
@@ -205,6 +206,15 @@ export default function SessionSidebar({ chat }) {
           </div>
         )}
       </div>
+
+      {/* 기억 패널 */}
+      {memory && (
+        <MemoryPanel
+          memories={memory.memories}
+          onAdd={memory.addMemory}
+          onDelete={memory.removeMemory}
+        />
+      )}
     </div>
   );
 }

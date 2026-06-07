@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { postAsk, readSSE } from "../api";
+import { extractMemory, postAsk, readSSE } from "../api";
 
 const SESSIONS_KEY = "corenote_sessions";
 const CONV_DRAFT_KEY = "corenote_conv_draft";
@@ -13,7 +13,7 @@ const readSessions = () => {
   }
 };
 
-export default function useChat() {
+export default function useChat(onMemoryExtracted) {
   const [question, setQuestion] = useState("");
   const [asking, setAsking] = useState(false);
   const [askError, setAskError] = useState("");
@@ -179,6 +179,10 @@ export default function useChat() {
       setConversation((prev) => [...prev, { q, a: answer, sources }]);
       setResult(null);
       setQuestion("");
+      // 기억 자동 추출 (fire-and-forget)
+      extractMemory(q, answer)
+        .then(({ extracted }) => { if (extracted?.length > 0) onMemoryExtracted?.(); })
+        .catch(() => {});
       setTimeout(scrollToBottom, 50);
     } catch (e) {
       setResult(null);

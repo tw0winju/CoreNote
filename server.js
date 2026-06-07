@@ -34,6 +34,7 @@ const DEFAULT_SETTINGS = {
   topK: Number(process.env.TOP_K || 5),
   hydeEnabled: false,
   rerankEnabled: false,
+  memoryEnabled: true,
   systemPrompt: "너는 제공된 자료에만 근거해 답하는 정확한 도우미야.",
 };
 
@@ -605,8 +606,80 @@ app.post("/api/settings", (req, res) => {
   if (hydeEnabled !== undefined) settings.hydeEnabled = Boolean(hydeEnabled);
   if (rerankEnabled !== undefined) settings.rerankEnabled = Boolean(rerankEnabled);
   if (systemPrompt !== undefined) settings.systemPrompt = String(systemPrompt);
+  if (memoryEnabled !== undefined) settings.memoryEnabled = Boolean(memoryEnabled);
   saveSettings();
   res.json(settings);
+});
+
+// ---------- 기억 ----------
+const MEMORY_PATH = path.join(DATA_DIR, "memory.json");
+
+function loadMemories() {
+  try {
+    if (fs.existsSync(MEMORY_PATH)) return JSON.parse(fs.readFileSync(MEMORY_PATH, "utf8"));
+  } catch {}
+  return [];
+}
+let memories = loadMemories();
+function saveMemories() {
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(MEMORY_PATH, JSON.stringify(memories, null, 2));
+}
+
+app.get("/api/memories", (_req, res) => res.json(memories));
+
+app.post("/api/memories", (req, res) => {
+  const content = req.body.content?.trim();
+  if (!content) return res.status(400).json({ error: "내용이 없습니다." });
+  const m = { id: crypto.randomUUID(), content, createdAt: Date.now(), source: "manual" };
+  memories.unshift(m);
+  saveMemories();
+  res.json(m);
+});
+
+app.delete("/api/memories/:id", (req, res) => {
+  memories = memories.filter((m) => m.id !== req.params.id);
+  saveMemories();
+  res.json({ ok: true });
+});
+
+app.post("/api/memories/extract", async (req, res) => {
+  const { q, a } = req.body;
+  if (!q || !a) return res.json({ extracted: [] });
+  try {
+    const prompt = `다음 대화에서 미래 대화에 도움이 될 사용자 관련 중요 사실을 추출하세요.
+규칙: 추출할 내용이 없으면 빈 배열, 최대 3개, 각 80자 이내, 반드시 JSON 배열만 출력.
+예시: ["사용자는 소프트웨어 공학 시험을 준비 중이다", "10장 품질 파트에 집중하고 싶어한다"]
+
+Q: ${q}
+A: ${a.slice(0, 400)}`;
+
+    const r = await ollamaFetch("/api/chat", {
+      model: settings.chatModel,
+      messages: [{ role: "user", content: prompt }],
+      stream: false,
+      options: { temperature: 0.1 },
+    });
+    if (!r.ok) return res.json({ extracted: [] });
+
+    const raw = (await r.json()).message?.content || "";
+    // <think> 블록 제거 후 JSON 추출
+    const cleaned = raw.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+    const match = cleaned.match(/\[[\s\S]*\]/);
+    if (!match) return res.json({ extracted: [] });
+
+    const extracted = JSON.parse(match[0])
+      .filter((s) => typeof s === "string" && s.trim().length > 0)
+      .slice(0, 3);
+
+    for (const content of extracted) {
+      memories.unshift({ id: crypto.randomUUID(), content: content.trim(), createdAt: Date.now(), source: "auto" });
+    }
+    if (extracted.length > 0) saveMemories();
+    res.json({ extracted });
+  } catch {
+    res.json({ extracted: [] });
+  }
 });
 
 // ---------- 5) 질문(검색 + 답변, SSE 스트리밍) ----------
@@ -727,10 +800,14 @@ ${context}
 ${question}`;
 
     const safeHistory = Array.isArray(history) ? history.slice(-20) : [];
+    const memoryBlock =
+      settings.memoryEnabled && memories.length > 0
+        ? "\n\n[기억]\n" + memories.slice(0, 15).map((m) => `- ${m.content}`).join("\n")
+        : "";
     const ollamaRes = await ollamaFetch("/api/chat", {
       model: settings.chatModel,
       messages: [
-        { role: "system", content: settings.systemPrompt },
+        { role: "system", content: settings.systemPrompt + memoryBlock },
         ...safeHistory,
         { role: "user", content: prompt },
       ],

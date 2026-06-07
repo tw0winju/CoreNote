@@ -3,6 +3,7 @@ import { C, sans } from "../theme";
 import useDocs from "../hooks/useDocs";
 import useIndexing from "../hooks/useIndexing";
 import useChat from "../hooks/useChat";
+import useMemory from "../hooks/useMemory";
 import useSettings from "../hooks/useSettings";
 import WarningBanner from "./WarningBanner";
 import SettingsModal from "./SettingsModal";
@@ -24,7 +25,8 @@ export default function App() {
     await docsHook.loadDocs();
     await docsHook.loadHealth();
   });
-  const chatHook = useChat();
+  const memoryHook = useMemory();
+  const chatHook = useChat(memoryHook.refresh);
 
   return (
     <div
@@ -46,7 +48,7 @@ export default function App() {
         />
       )}
 
-      <SessionSidebar chat={chatHook} />
+      <SessionSidebar chat={chatHook} memory={memoryHook} />
 
       <div
         style={{

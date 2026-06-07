@@ -73,6 +73,22 @@ export const postSettings = (data) =>
     body: JSON.stringify(data),
   });
 
+// ── 기억 ──────────────────────────────────────────────────────────────────────
+export const fetchMemories = () => fetch("/api/memories").then((r) => r.json());
+export const postMemory = (content) =>
+  fetch("/api/memories", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content }),
+  }).then((r) => r.json());
+export const deleteMemory = (id) => fetch(`/api/memories/${id}`, { method: "DELETE" });
+export const extractMemory = (q, a) =>
+  fetch("/api/memories/extract", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ q, a }),
+  }).then((r) => r.json());
+
 // ── SSE 파서 ──────────────────────────────────────────────────────────────────
 // error 이벤트는 자동으로 throw. 나머지는 handlers[type](event)로 디스패치.
 export async function readSSE(response, handlers) {
