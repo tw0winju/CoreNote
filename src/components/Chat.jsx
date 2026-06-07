@@ -261,6 +261,8 @@ export default function Chat({ chat, docs: docsHook }) {
     regenerate,
     navigateHistory,
     scrollRef,
+    toggleFavorite,
+    isFavorited,
   } = chat;
 
   const { selectedDocs, docs, setSelectedDocs } = docsHook;
@@ -379,9 +381,25 @@ export default function Chat({ chat, docs: docsHook }) {
                 onCitationClick={handleCitation}
               />
 
-              {/* 재생성 버튼 (마지막 항목) */}
-              {isLast && !asking && (
-                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              {/* 재생성 + 즐겨찾기 버튼 */}
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
+                <button
+                  onClick={() => toggleFavorite(item)}
+                  title={isFavorited(item.q, item.a) ? "즐겨찾기 해제" : "즐겨찾기 저장"}
+                  style={{
+                    border: `1px solid ${isFavorited(item.q, item.a) ? C.accent : C.line}`,
+                    background: isFavorited(item.q, item.a) ? C.accentSoft : "transparent",
+                    color: isFavorited(item.q, item.a) ? C.accent : C.inkSoft,
+                    fontSize: 12,
+                    cursor: "pointer",
+                    padding: "3px 8px",
+                    borderRadius: 6,
+                    fontFamily: sans,
+                  }}
+                >
+                  {isFavorited(item.q, item.a) ? "★ 저장됨" : "☆ 저장"}
+                </button>
+                {isLast && !asking && (
                   <button
                     onClick={() => regenerate(selectedDocs)}
                     style={{
@@ -397,8 +415,8 @@ export default function Chat({ chat, docs: docsHook }) {
                   >
                     ↺ 재생성
                   </button>
-                </div>
-              )}
+                )}
+              </div>
 
               {/* 출처 토글 */}
               {item.sources?.length > 0 && (

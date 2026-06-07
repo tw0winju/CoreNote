@@ -10,9 +10,11 @@ import SettingsModal from "./SettingsModal";
 import SessionSidebar from "./SessionSidebar";
 import Library from "./Library";
 import Chat from "./Chat";
+import LearnPage from "./LearnPage";
 
 export default function App() {
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem("corenote_theme") === "dark");
+  const [page, setPage] = useState("main");
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", darkMode ? "dark" : "light");
@@ -69,8 +71,32 @@ export default function App() {
             gap: 12,
           }}
         >
+          {/* 페이지 탭 */}
+          <div style={{ display: "flex", gap: 4, flexShrink: 0, alignSelf: "center" }}>
+            {[["main", "💬 대화"], ["learn", "📖 학습"]].map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setPage(key)}
+                style={{
+                  border: `1px solid ${page === key ? C.accent : C.line}`,
+                  background: page === key ? C.accentSoft : "transparent",
+                  color: page === key ? C.accent : C.inkSoft,
+                  padding: "5px 13px",
+                  borderRadius: 8,
+                  fontSize: 13,
+                  cursor: "pointer",
+                  fontFamily: sans,
+                  fontWeight: page === key ? 600 : 400,
+                  transition: "all .15s",
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
           <div style={{ flex: 1 }}>
-            <WarningBanner health={docsHook.health} />
+            {page === "main" && <WarningBanner health={docsHook.health} />}
           </div>
 
           {/* 다크모드 토글 */}
@@ -111,21 +137,25 @@ export default function App() {
           </button>
         </div>
 
-        {/* 콘텐츠 2열 */}
-        <div
-          style={{
-            flex: 1,
-            overflow: "hidden",
-            padding: "0 24px 16px",
-            display: "flex",
-            gap: 20,
-          }}
-        >
-          <div style={{ flex: "0 0 300px", overflowY: "auto", paddingRight: 4 }}>
-            <Library docs={docsHook} indexing={indexingHook} />
+        {/* 콘텐츠 영역 */}
+        {page === "main" ? (
+          <div
+            style={{
+              flex: 1,
+              overflow: "hidden",
+              padding: "0 24px 16px",
+              display: "flex",
+              gap: 20,
+            }}
+          >
+            <div style={{ flex: "0 0 300px", overflowY: "auto", paddingRight: 4 }}>
+              <Library docs={docsHook} indexing={indexingHook} />
+            </div>
+            <Chat chat={chatHook} docs={docsHook} />
           </div>
-          <Chat chat={chatHook} docs={docsHook} />
-        </div>
+        ) : (
+          <LearnPage chat={chatHook} docs={docsHook} memory={memoryHook} />
+        )}
       </div>
     </div>
   );

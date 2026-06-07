@@ -4,6 +4,7 @@ import { extractMemory, postAsk, readSSE } from "../api";
 const SESSIONS_KEY = "corenote_sessions";
 const CONV_DRAFT_KEY = "corenote_conv_draft";
 const HISTORY_KEY = "corenote_q_history";
+const FAVORITES_KEY = "corenote_favorites";
 
 const readSessions = () => {
   try {
@@ -25,6 +26,9 @@ export default function useChat(onMemoryExtracted) {
   const [showSessions, setShowSessions] = useState(false);
   const [savingName, setSavingName] = useState("");
   const [showSaveInput, setShowSaveInput] = useState(false);
+  const [favorites, setFavorites] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(FAVORITES_KEY) || "[]"); } catch { return []; }
+  });
 
   // 대화 임시 저장 (세션 새로고침 복원)
   const [conversation, setConversation] = useState(() => {
@@ -141,6 +145,27 @@ export default function useChat(onMemoryExtracted) {
     localStorage.setItem(SESSIONS_KEY, JSON.stringify(updated));
   };
 
+  const toggleFavorite = (item) => {
+    setFavorites((prev) => {
+      const exists = prev.find((f) => f.q === item.q && f.a === item.a);
+      const next = exists
+        ? prev.filter((f) => !(f.q === item.q && f.a === item.a))
+        : [{ ...item, id: Date.now().toString(), savedAt: Date.now() }, ...prev];
+      localStorage.setItem(FAVORITES_KEY, JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const removeFavorite = (id) => {
+    setFavorites((prev) => {
+      const next = prev.filter((f) => f.id !== id);
+      localStorage.setItem(FAVORITES_KEY, JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const isFavorited = (q, a) => favorites.some((f) => f.q === q && f.a === a);
+
   const _doAsk = async (q, history, selectedDocs) => {
     setAsking(true);
     setAskError("");
@@ -243,5 +268,9 @@ export default function useChat(onMemoryExtracted) {
     saveSession,
     loadSession,
     deleteSession,
+    favorites,
+    toggleFavorite,
+    removeFavorite,
+    isFavorited,
   };
 }

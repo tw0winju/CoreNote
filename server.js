@@ -597,7 +597,7 @@ app.delete("/api/docs/:id", async (req, res) => {
 // ---------- 4) 설정 ----------
 app.get("/api/settings", (_req, res) => res.json(settings));
 app.post("/api/settings", (req, res) => {
-  const { chatModel, embedModel, maxChunkChars, topK, hydeEnabled, rerankEnabled, systemPrompt } =
+  const { chatModel, embedModel, maxChunkChars, topK, hydeEnabled, rerankEnabled, systemPrompt, memoryEnabled } =
     req.body;
   if (chatModel !== undefined) settings.chatModel = String(chatModel).trim();
   if (embedModel !== undefined) settings.embedModel = String(embedModel).trim();
@@ -679,6 +679,73 @@ A: ${a.slice(0, 400)}`;
     res.json({ extracted });
   } catch {
     res.json({ extracted: [] });
+  }
+});
+
+// ---------- 퀴즈 생성 ----------
+app.post("/api/quiz", async (req, res) => {
+  const { docId, count = 5 } = req.body;
+  if (!docId) return res.status(400).json({ error: "docId가 필요합니다." });
+  try {
+    const table = await getTable();
+    if (!table) return res.status(404).json({ error: "문서를 찾을 수 없어요." });
+    const chunks = await table.query().where(`docId = '${docId}'`).toArray();
+    if (!chunks.length) return res.status(404).json({ error: "문서를 찾을 수 없어요." });
+    chunks.sort((a, b) => a.index - b.index);
+    const step = Math.max(1, Math.floor(chunks.length / 8));
+    const sampled = chunks.filter((_, i) => i % step === 0).slice(0, 8);
+    const text = sampled.map((c) => c.text).join("\n\n").slice(0, 3000);
+    const prompt = `다음 내용을 바탕으로 학습 퀴즈 ${count}개를 만들어줘.
+JSON 배열 형식으로만 출력해. 각 항목: {"q": "질문", "a": "정답", "hint": "힌트(한 줄)"}
+<think> 없이 JSON만 출력.
+
+내용:
+${text}`;
+    const r = await ollamaFetch("/api/chat", {
+      model: settings.chatModel,
+      messages: [{ role: "user", content: prompt }],
+      stream: false,
+      options: { temperature: 0.3 },
+    });
+    if (!r.ok) return res.status(502).json({ error: "퀴즈 생성 실패" });
+    const raw = (await r.json()).message?.content || "";
+    const cleaned = raw.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+    const match = cleaned.match(/\[[\s\S]*\]/);
+    if (!match) return res.status(502).json({ error: "퀴즈 파싱 실패" });
+    const questions = JSON.parse(match[0]).filter((q) => q.q && q.a).slice(0, count);
+    res.json({ questions });
+  } catch (e) {
+    res.status(502).json({ error: e.message || "퀴즈 생성 중 오류" });
+  }
+});
+
+// ---------- 문서 요약 ----------
+app.post("/api/summary", async (req, res) => {
+  const { docId } = req.body;
+  if (!docId) return res.status(400).json({ error: "docId가 필요합니다." });
+  try {
+    const table = await getTable();
+    if (!table) return res.status(404).json({ error: "문서를 찾을 수 없어요." });
+    const chunks = await table.query().where(`docId = '${docId}'`).toArray();
+    if (!chunks.length) return res.status(404).json({ error: "문서를 찾을 수 없어요." });
+    chunks.sort((a, b) => a.index - b.index);
+    const text = chunks.slice(0, 6).map((c) => c.text).join("\n\n").slice(0, 3000);
+    const prompt = `다음 내용의 핵심을 3~5개의 bullet point로 요약해줘.
+마크다운 형식(- 으로 시작), <think> 없이 바로 출력.
+
+${text}`;
+    const r = await ollamaFetch("/api/chat", {
+      model: settings.chatModel,
+      messages: [{ role: "user", content: prompt }],
+      stream: false,
+      options: { temperature: 0.2 },
+    });
+    if (!r.ok) return res.status(502).json({ error: "요약 생성 실패" });
+    const raw = (await r.json()).message?.content || "";
+    const summary = raw.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+    res.json({ summary });
+  } catch (e) {
+    res.status(502).json({ error: e.message || "요약 생성 중 오류" });
   }
 });
 
