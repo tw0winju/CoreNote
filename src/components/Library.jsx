@@ -604,23 +604,14 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
             />
           </div>
 
-          {/* 업로드 옵션: 폴더 선택 + PDF 페이지 범위 */}
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              alignItems: "center",
-              gap: 8,
-              marginBottom: 14,
-              fontSize: 13,
-              color: C.inkSoft,
-            }}
-          >
+          {/* 업로드 옵션: 폴더 선택 */}
+          <div style={{ marginBottom: 6 }}>
             <select
               value={targetFolderId ?? ""}
               onChange={(e) => setTargetFolderId(e.target.value || null)}
               disabled={indexing}
               style={{
+                width: "100%",
                 padding: "4px 7px",
                 borderRadius: 7,
                 border: `1px solid ${C.line}`,
@@ -638,8 +629,20 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
                 </option>
               ))}
             </select>
-            <span style={{ color: C.line }}>|</span>
-            <span>PDF 페이지</span>
+          </div>
+
+          {/* PDF 페이지 범위 */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              marginBottom: 14,
+              fontSize: 13,
+              color: C.inkSoft,
+            }}
+          >
+            <span style={{ flexShrink: 0 }}>PDF 페이지</span>
             <input
               type="number"
               min={1}
@@ -648,7 +651,8 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
               placeholder="시작"
               disabled={indexing}
               style={{
-                width: 55,
+                flex: 1,
+                minWidth: 0,
                 padding: "4px 7px",
                 borderRadius: 7,
                 border: `1px solid ${C.line}`,
@@ -667,7 +671,8 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
               placeholder="끝"
               disabled={indexing}
               style={{
-                width: 55,
+                flex: 1,
+                minWidth: 0,
                 padding: "4px 7px",
                 borderRadius: 7,
                 border: `1px solid ${C.line}`,
