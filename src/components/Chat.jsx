@@ -1,5 +1,102 @@
 import { useEffect } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { C, sans } from "../theme";
+
+function highlight(text, query) {
+  if (!query || !text) return text;
+  const words = query
+    .trim()
+    .split(/\s+/)
+    .filter((w) => w.length > 1);
+  if (!words.length) return text;
+  const escaped = words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const pattern = new RegExp(`(${escaped.join("|")})`, "gi");
+  return text.split(pattern).map((part, i) =>
+    i % 2 === 1 ? (
+      <mark key={i} style={{ background: "#fff3cd", borderRadius: 2, padding: "0 1px" }}>
+        {part}
+      </mark>
+    ) : (
+      part
+    ),
+  );
+}
+
+const mdComponents = (C) => ({
+  p: ({ children }) => <p style={{ margin: "0 0 8px", lineHeight: 1.75 }}>{children}</p>,
+  ul: ({ children }) => <ul style={{ paddingLeft: 20, margin: "4px 0 8px" }}>{children}</ul>,
+  ol: ({ children }) => <ol style={{ paddingLeft: 20, margin: "4px 0 8px" }}>{children}</ol>,
+  li: ({ children }) => <li style={{ margin: "2px 0", lineHeight: 1.6 }}>{children}</li>,
+  h1: ({ children }) => (
+    <h1 style={{ fontSize: 17, fontWeight: 700, margin: "14px 0 6px" }}>{children}</h1>
+  ),
+  h2: ({ children }) => (
+    <h2 style={{ fontSize: 15, fontWeight: 700, margin: "12px 0 5px" }}>{children}</h2>
+  ),
+  h3: ({ children }) => (
+    <h3 style={{ fontSize: 14, fontWeight: 600, margin: "10px 0 4px" }}>{children}</h3>
+  ),
+  blockquote: ({ children }) => (
+    <blockquote
+      style={{
+        borderLeft: `3px solid ${C.accentSoft}`,
+        paddingLeft: 12,
+        margin: "8px 0",
+        color: C.inkSoft,
+      }}
+    >
+      {children}
+    </blockquote>
+  ),
+  code: ({ inline, children }) =>
+    inline ? (
+      <code
+        style={{
+          background: C.paper2,
+          padding: "1px 5px",
+          borderRadius: 3,
+          fontSize: "0.88em",
+          fontFamily: "monospace",
+        }}
+      >
+        {children}
+      </code>
+    ) : (
+      <pre
+        style={{
+          background: C.paper2,
+          padding: "12px 14px",
+          borderRadius: 8,
+          overflowX: "auto",
+          margin: "8px 0",
+        }}
+      >
+        <code style={{ fontFamily: "monospace", fontSize: 13, lineHeight: 1.5 }}>{children}</code>
+      </pre>
+    ),
+  pre: ({ children }) => <>{children}</>,
+  table: ({ children }) => (
+    <table style={{ borderCollapse: "collapse", width: "100%", margin: "8px 0", fontSize: 13 }}>
+      {children}
+    </table>
+  ),
+  th: ({ children }) => (
+    <th
+      style={{
+        border: `1px solid ${C.line}`,
+        padding: "4px 8px",
+        background: C.paper2,
+        fontWeight: 600,
+      }}
+    >
+      {children}
+    </th>
+  ),
+  td: ({ children }) => (
+    <td style={{ border: `1px solid ${C.line}`, padding: "4px 8px" }}>{children}</td>
+  ),
+});
 
 function CopyButton({ text, id, copiedKey, onCopy }) {
   return (
@@ -25,7 +122,30 @@ function CopyButton({ text, id, copiedKey, onCopy }) {
   );
 }
 
-function SourceCard({ s, isOpen, onToggle }) {
+function AnswerBubble({ text, id, copiedKey, onCopy, streaming }) {
+  const components = mdComponents(C);
+  return (
+    <div
+      style={{
+        position: "relative",
+        background: C.card,
+        border: `1px solid ${C.line}`,
+        borderLeft: `4px solid ${streaming ? C.accent : C.accentSoft}`,
+        borderRadius: "0 12px 12px 0",
+        padding: "14px 50px 14px 18px",
+        fontSize: 14.5,
+        lineHeight: 1.75,
+      }}
+    >
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+        {text}
+      </ReactMarkdown>
+      <CopyButton text={text} id={id} copiedKey={copiedKey} onCopy={onCopy} />
+    </div>
+  );
+}
+
+function SourceCard({ s, isOpen, onToggle, query }) {
   return (
     <div
       onClick={onToggle}
@@ -75,7 +195,7 @@ function SourceCard({ s, isOpen, onToggle }) {
             lineHeight: 1.6,
           }}
         >
-          {s.snippet}…
+          {highlight(s.snippet, query)}…
         </div>
       )}
     </div>
@@ -99,12 +219,12 @@ export default function Chat({ chat, docs: docsHook }) {
     exportConversation,
     clearConversation,
     ask,
+    regenerate,
     scrollRef,
   } = chat;
 
   const { selectedDocs, docs, setSelectedDocs } = docsHook;
 
-  // 새 메시지가 오면 스크롤 최하단으로
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [conversation.length, result?.answer, scrollRef]);
@@ -187,84 +307,100 @@ export default function Chat({ chat, docs: docsHook }) {
         )}
 
         {/* 대화 기록 */}
-        {conversation.map((item, idx) => (
-          <div key={idx} style={{ display: "grid", gap: 8 }}>
-            {/* 질문 버블 */}
-            <div
-              style={{
-                background: C.paper2,
-                border: `1px solid ${C.line}`,
-                borderRadius: "12px 12px 4px 12px",
-                padding: "10px 14px",
-                fontSize: 14,
-                color: C.inkSoft,
-                maxWidth: "82%",
-                marginLeft: "auto",
-                lineHeight: 1.55,
-                whiteSpace: "pre-wrap",
-              }}
-            >
-              {item.q}
-            </div>
-
-            {/* 답변 버블 */}
-            <div
-              style={{
-                position: "relative",
-                background: C.card,
-                border: `1px solid ${C.line}`,
-                borderLeft: `4px solid ${C.accentSoft}`,
-                borderRadius: "0 12px 12px 0",
-                padding: "14px 50px 14px 18px",
-                fontSize: 14.5,
-                lineHeight: 1.75,
-                whiteSpace: "pre-wrap",
-              }}
-            >
-              {item.a}
-              <CopyButton text={item.a} id={idx} copiedKey={copiedKey} onCopy={copyText} />
-            </div>
-
-            {/* 출처 토글 */}
-            {item.sources?.length > 0 && (
-              <div style={{ paddingLeft: 4 }}>
-                <button
-                  onClick={() =>
-                    setOpenConvSrc(openConvSrc?.turn === idx ? null : { turn: idx, srcN: null })
-                  }
-                  style={{
-                    border: "none",
-                    background: "transparent",
-                    color: C.inkSoft,
-                    fontSize: 12.5,
-                    cursor: "pointer",
-                    padding: 0,
-                    fontFamily: sans,
-                  }}
-                >
-                  출처 {item.sources.length}개 {openConvSrc?.turn === idx ? "▲" : "▼"}
-                </button>
-                {openConvSrc?.turn === idx && (
-                  <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
-                    {item.sources.map((s) => (
-                      <SourceCard
-                        key={s.n}
-                        s={s}
-                        isOpen={openConvSrc?.srcN === s.n}
-                        onToggle={() =>
-                          setOpenConvSrc({
-                            turn: idx,
-                            srcN: openConvSrc?.srcN === s.n ? null : s.n,
-                          })
-                        }
-                      />
-                    ))}
-                  </div>
-                )}
+        {conversation.map((item, idx) => {
+          const isLast = idx === conversation.length - 1;
+          return (
+            <div key={idx} style={{ display: "grid", gap: 8 }}>
+              {/* 질문 버블 */}
+              <div
+                style={{
+                  background: C.paper2,
+                  border: `1px solid ${C.line}`,
+                  borderRadius: "12px 12px 4px 12px",
+                  padding: "10px 14px",
+                  fontSize: 14,
+                  color: C.inkSoft,
+                  maxWidth: "82%",
+                  marginLeft: "auto",
+                  lineHeight: 1.55,
+                  whiteSpace: "pre-wrap",
+                }}
+              >
+                {item.q}
               </div>
-            )}
-          </div>
-        ))}
+
+              {/* 답변 버블 */}
+              <AnswerBubble
+                text={item.a}
+                id={idx}
+                copiedKey={copiedKey}
+                onCopy={copyText}
+                streaming={false}
+              />
+
+              {/* 재생성 버튼 (마지막 항목) */}
+              {isLast && !asking && (
+                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                  <button
+                    onClick={() => regenerate(selectedDocs)}
+                    style={{
+                      border: `1px solid ${C.line}`,
+                      background: "transparent",
+                      color: C.inkSoft,
+                      fontSize: 12,
+                      cursor: "pointer",
+                      padding: "3px 9px",
+                      borderRadius: 6,
+                      fontFamily: sans,
+                    }}
+                  >
+                    ↺ 재생성
+                  </button>
+                </div>
+              )}
+
+              {/* 출처 토글 */}
+              {item.sources?.length > 0 && (
+                <div style={{ paddingLeft: 4 }}>
+                  <button
+                    onClick={() =>
+                      setOpenConvSrc(openConvSrc?.turn === idx ? null : { turn: idx, srcN: null })
+                    }
+                    style={{
+                      border: "none",
+                      background: "transparent",
+                      color: C.inkSoft,
+                      fontSize: 12.5,
+                      cursor: "pointer",
+                      padding: 0,
+                      fontFamily: sans,
+                    }}
+                  >
+                    출처 {item.sources.length}개 {openConvSrc?.turn === idx ? "▲" : "▼"}
+                  </button>
+                  {openConvSrc?.turn === idx && (
+                    <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+                      {item.sources.map((s) => (
+                        <SourceCard
+                          key={s.n}
+                          s={s}
+                          query={item.q}
+                          isOpen={openConvSrc?.srcN === s.n}
+                          onToggle={() =>
+                            setOpenConvSrc({
+                              turn: idx,
+                              srcN: openConvSrc?.srcN === s.n ? null : s.n,
+                            })
+                          }
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
 
         {/* 로딩 스피너 */}
         {asking && !result?.answer && (
@@ -290,7 +426,6 @@ export default function Chat({ chat, docs: docsHook }) {
         {/* 스트리밍 결과 */}
         {result && (
           <div className="rise" style={{ display: "grid", gap: 8 }}>
-            {/* 현재 질문 표시 */}
             <div
               style={{
                 background: C.paper2,
@@ -308,27 +443,13 @@ export default function Chat({ chat, docs: docsHook }) {
               {question}
             </div>
 
-            <div
-              style={{
-                position: "relative",
-                background: C.card,
-                border: `1px solid ${C.line}`,
-                borderLeft: `4px solid ${C.accent}`,
-                borderRadius: "0 12px 12px 0",
-                padding: "14px 50px 14px 18px",
-                fontSize: 14.5,
-                lineHeight: 1.75,
-                whiteSpace: "pre-wrap",
-              }}
-            >
-              {result.answer}
-              <CopyButton
-                text={result.answer || ""}
-                id="current"
-                copiedKey={copiedKey}
-                onCopy={copyText}
-              />
-            </div>
+            <AnswerBubble
+              text={result.answer || ""}
+              id="current"
+              copiedKey={copiedKey}
+              onCopy={copyText}
+              streaming={true}
+            />
 
             {result.sources?.length > 0 && (
               <div>
@@ -348,6 +469,7 @@ export default function Chat({ chat, docs: docsHook }) {
                     <SourceCard
                       key={s.n}
                       s={s}
+                      query={question}
                       isOpen={openSrc === s.n}
                       onToggle={() => setOpenSrc(openSrc === s.n ? null : s.n)}
                     />
@@ -358,13 +480,11 @@ export default function Chat({ chat, docs: docsHook }) {
           </div>
         )}
 
-        {/* 스크롤 앵커 */}
         <div style={{ flexShrink: 0, height: 1 }} />
       </div>
 
       {/* ── 입력 영역 (하단 고정) ── */}
       <div style={{ flexShrink: 0, paddingTop: 10 }}>
-        {/* 검색 범위 표시 */}
         {selectedDocs.size > 0 && (
           <div style={{ fontSize: 12.5, color: C.accent, marginBottom: 7 }}>
             {selectedDocs.size}개 문서 범위로 검색 중 ·{" "}

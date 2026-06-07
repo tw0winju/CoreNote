@@ -25,8 +25,10 @@ export default function SettingsModal({ form, setForm, onSave, onClose }) {
           borderRadius: 18,
           padding: "28px 32px",
           width: "100%",
-          maxWidth: 460,
+          maxWidth: 520,
           boxShadow: "0 8px 40px rgba(0,0,0,0.18)",
+          maxHeight: "90vh",
+          overflowY: "auto",
         }}
       >
         <h3 style={{ fontFamily: serif, fontSize: 20, margin: "0 0 20px", fontWeight: 700 }}>
@@ -124,6 +126,34 @@ export default function SettingsModal({ form, setForm, onSave, onClose }) {
             </label>
           </div>
         ))}
+
+        {/* 시스템 프롬프트 */}
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ fontSize: 13, color: C.inkSoft, display: "block", marginBottom: 4 }}>
+            시스템 프롬프트
+          </label>
+          <textarea
+            value={form.systemPrompt || ""}
+            onChange={(e) => set("systemPrompt", e.target.value)}
+            rows={4}
+            style={{
+              width: "100%",
+              padding: "7px 10px",
+              borderRadius: 8,
+              border: `1px solid ${C.line}`,
+              fontFamily: sans,
+              fontSize: 13,
+              background: C.card,
+              boxSizing: "border-box",
+              resize: "vertical",
+              lineHeight: 1.5,
+              outline: "none",
+            }}
+          />
+          <div style={{ fontSize: 11.5, color: C.inkSoft, marginTop: 3 }}>
+            AI의 역할·톤을 지정합니다. 빈칸이면 기본값이 사용됩니다.
+          </div>
+        </div>
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 20 }}>
           <button

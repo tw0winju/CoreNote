@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { postIndexFile, postIndexUrl, readSSE } from "../api";
 
+const VALID_EXTS = ["pdf", "txt", "md", "docx"];
+
 export default function useIndexing(onIndexed) {
   const [indexing, setIndexing] = useState(false);
   const [indexError, setIndexError] = useState("");
@@ -11,79 +13,99 @@ export default function useIndexing(onIndexed) {
   const [pageFrom, setPageFrom] = useState("");
   const [pageTo, setPageTo] = useState("");
   const [targetFolderId, setTargetFolderId] = useState(null);
+  const [queueInfo, setQueueInfo] = useState(null);
 
-  const begin = () => {
-    setIndexing(true);
+  const readBase64 = (f) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result).split(",")[1]);
+      reader.onerror = () => reject(new Error("파일을 읽지 못했어요."));
+      reader.readAsDataURL(f);
+    });
+
+  const processSSE = async (r) => {
+    await readSSE(r, {
+      progress: (e) => {
+        setIndexStatus("");
+        setIndexProgress({ done: e.done, total: e.total });
+      },
+      status: (e) => setIndexStatus(e.message),
+      done: async () => await onIndexed(),
+    });
+  };
+
+  const uploadFiles = async (files) => {
+    const arr = Array.from(files).filter((f) =>
+      VALID_EXTS.includes(f.name.split(".").pop().toLowerCase()),
+    );
+    if (!arr.length) {
+      setIndexError("PDF, TXT, MD, DOCX 파일만 추가할 수 있어요.");
+      return;
+    }
+    const from = pageFrom ? Number(pageFrom) : null;
+    const to = pageTo ? Number(pageTo) : null;
     setIndexError("");
-    setIndexProgress(null);
-    setIndexStatus("");
-  };
-  const end = () => {
-    setIndexing(false);
-    setIndexProgress(null);
-    setIndexStatus("");
-  };
-
-  const run = async (fetchFn, onSuccess) => {
-    begin();
+    setIndexing(true);
     try {
-      const r = await fetchFn();
-      if (!r.ok) {
-        const d = await r.json();
-        throw new Error(d.error || "색인 실패");
+      for (let i = 0; i < arr.length; i++) {
+        if (arr.length > 1) setQueueInfo({ cur: i + 1, total: arr.length });
+        setIndexProgress(null);
+        setIndexStatus("");
+        const base64 = await readBase64(arr[i]);
+        const r = await postIndexFile(base64, arr[i].name, from, to, targetFolderId);
+        if (!r.ok) {
+          const d = await r.json();
+          throw new Error(d.error || "색인 실패");
+        }
+        await processSSE(r);
       }
-      await readSSE(r, {
-        progress: (e) => {
-          setIndexStatus("");
-          setIndexProgress({ done: e.done, total: e.total });
-        },
-        status: (e) => setIndexStatus(e.message),
-        done: async () => await onIndexed(),
-      });
-      onSuccess?.();
+      setPageFrom("");
+      setPageTo("");
     } catch (e) {
       setIndexError(e.message || "색인 중 오류가 발생했어요.");
     } finally {
-      end();
+      setIndexing(false);
+      setIndexProgress(null);
+      setIndexStatus("");
+      setQueueInfo(null);
     }
   };
 
   const uploadFile = (f) => {
     if (!f) return;
-    const ext = f.name.split(".").pop().toLowerCase();
-    if (!["pdf", "txt", "md", "docx"].includes(ext)) {
-      setIndexError("PDF, TXT, MD, DOCX 파일만 추가할 수 있어요.");
-      return;
-    }
-    const reader = new FileReader();
-    const from = pageFrom ? Number(pageFrom) : null;
-    const to = pageTo ? Number(pageTo) : null;
-    reader.onload = () =>
-      run(
-        () => postIndexFile(String(reader.result).split(",")[1], f.name, from, to, targetFolderId),
-        () => {
-          setPageFrom("");
-          setPageTo("");
-        },
-      );
-    reader.onerror = () => setIndexError("파일을 읽지 못했어요.");
-    reader.readAsDataURL(f);
+    uploadFiles([f]);
   };
 
-  const uploadUrl = () => {
+  const uploadUrl = async () => {
     const url = urlInput.trim();
     if (!url) return;
-    run(
-      () => postIndexUrl(url, targetFolderId),
-      () => setUrlInput(""),
-    );
+    setIndexError("");
+    setIndexing(true);
+    setIndexProgress(null);
+    setIndexStatus("");
+    try {
+      const r = await postIndexUrl(url, targetFolderId);
+      if (!r.ok) {
+        const d = await r.json();
+        throw new Error(d.error || "색인 실패");
+      }
+      await processSSE(r);
+      setUrlInput("");
+    } catch (e) {
+      setIndexError(e.message || "색인 중 오류가 발생했어요.");
+    } finally {
+      setIndexing(false);
+      setIndexProgress(null);
+      setIndexStatus("");
+    }
   };
 
+  const queueSuffix = queueInfo ? ` (${queueInfo.cur}/${queueInfo.total})` : "";
   const spinnerMsg =
-    indexStatus ||
-    (indexProgress
-      ? `임베딩 중… (${indexProgress.done}/${indexProgress.total})`
-      : "텍스트 추출 중…");
+    (indexStatus ||
+      (indexProgress
+        ? `임베딩 중… (${indexProgress.done}/${indexProgress.total})`
+        : "텍스트 추출 중…")) + queueSuffix;
 
   return {
     indexing,
@@ -94,6 +116,7 @@ export default function useIndexing(onIndexed) {
     urlInput,
     setUrlInput,
     uploadFile,
+    uploadFiles,
     uploadUrl,
     pageFrom,
     setPageFrom,

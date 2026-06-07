@@ -97,18 +97,11 @@ export default function useChat() {
     localStorage.setItem(SESSIONS_KEY, JSON.stringify(updated));
   };
 
-  const ask = async (selectedDocs) => {
-    const q = question.trim();
-    if (!q || asking) return;
+  const _doAsk = async (q, history, selectedDocs) => {
     setAsking(true);
     setAskError("");
     setResult(null);
     setOpenSrc(null);
-
-    const history = conversation.flatMap(({ q: cq, a: ca }) => [
-      { role: "user", content: cq },
-      { role: "assistant", content: ca },
-    ]);
 
     try {
       const r = await postAsk(q, history, selectedDocs);
@@ -143,6 +136,28 @@ export default function useChat() {
     }
   };
 
+  const ask = (selectedDocs) => {
+    const q = question.trim();
+    if (!q || asking) return;
+    const history = conversation.flatMap(({ q: cq, a: ca }) => [
+      { role: "user", content: cq },
+      { role: "assistant", content: ca },
+    ]);
+    _doAsk(q, history, selectedDocs);
+  };
+
+  const regenerate = (selectedDocs) => {
+    if (!conversation.length || asking) return;
+    const lastItem = conversation[conversation.length - 1];
+    const prevConv = conversation.slice(0, -1);
+    const prevHistory = prevConv.flatMap(({ q: cq, a: ca }) => [
+      { role: "user", content: cq },
+      { role: "assistant", content: ca },
+    ]);
+    setConversation(prevConv);
+    _doAsk(lastItem.q, prevHistory, selectedDocs);
+  };
+
   return {
     question,
     setQuestion,
@@ -159,6 +174,7 @@ export default function useChat() {
     exportConversation,
     clearConversation,
     ask,
+    regenerate,
     scrollRef,
     sessions,
     showSessions,

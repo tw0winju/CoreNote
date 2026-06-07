@@ -34,6 +34,7 @@ const DEFAULT_SETTINGS = {
   topK: Number(process.env.TOP_K || 5),
   hydeEnabled: false,
   rerankEnabled: false,
+  systemPrompt: "너는 제공된 자료에만 근거해 답하는 정확한 도우미야.",
 };
 
 function loadSettings() {
@@ -565,13 +566,15 @@ app.delete("/api/docs/:id", async (req, res) => {
 // ---------- 4) 설정 ----------
 app.get("/api/settings", (_req, res) => res.json(settings));
 app.post("/api/settings", (req, res) => {
-  const { chatModel, embedModel, maxChunkChars, topK, hydeEnabled, rerankEnabled } = req.body;
+  const { chatModel, embedModel, maxChunkChars, topK, hydeEnabled, rerankEnabled, systemPrompt } =
+    req.body;
   if (chatModel !== undefined) settings.chatModel = String(chatModel).trim();
   if (embedModel !== undefined) settings.embedModel = String(embedModel).trim();
   if (maxChunkChars !== undefined) settings.maxChunkChars = Math.max(200, Number(maxChunkChars));
   if (topK !== undefined) settings.topK = Math.max(1, Number(topK));
   if (hydeEnabled !== undefined) settings.hydeEnabled = Boolean(hydeEnabled);
   if (rerankEnabled !== undefined) settings.rerankEnabled = Boolean(rerankEnabled);
+  if (systemPrompt !== undefined) settings.systemPrompt = String(systemPrompt);
   saveSettings();
   res.json(settings);
 });
@@ -658,7 +661,7 @@ app.post("/api/ask", async (req, res) => {
         docName: docs.find((d) => d.id === s.c.docId)?.name || s.c.docName,
         index: s.c.index,
         score: Number(s.score.toFixed(3)),
-        snippet: s.c.text.slice(0, 300),
+        snippet: s.c.text.slice(0, 600),
       })),
     });
 
@@ -678,7 +681,7 @@ ${question}`;
     const ollamaRes = await ollamaFetch("/api/chat", {
       model: settings.chatModel,
       messages: [
-        { role: "system", content: "너는 제공된 자료에만 근거해 답하는 정확한 도우미야." },
+        { role: "system", content: settings.systemPrompt },
         ...safeHistory,
         { role: "user", content: prompt },
       ],

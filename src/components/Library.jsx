@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { C, sans, serif } from "../theme";
 
-function FolderRow({ folder, docs, docsHook }) {
+function FolderRow({ folder, docs, docsHook, onDrop }) {
   const {
     selectedDocs,
     toggleFolder,
@@ -25,13 +25,26 @@ function FolderRow({ folder, docs, docsHook }) {
   } = docsHook;
 
   const [open, setOpen] = useState(true);
+  const [dropOver, setDropOver] = useState(false);
   const folderDocs = docs.filter((d) => d.folderId === folder.id);
   const selectedCount = folderDocs.filter((d) => selectedDocs.has(d.id)).length;
   const allSelected = folderDocs.length > 0 && selectedCount === folderDocs.length;
   const someSelected = selectedCount > 0 && !allSelected;
 
   return (
-    <div>
+    <div
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDropOver(true);
+      }}
+      onDragLeave={() => setDropOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDropOver(false);
+        const docId = e.dataTransfer.getData("docId");
+        if (docId) onDrop(docId, folder.id);
+      }}
+    >
       {/* 폴더 헤더 */}
       <div
         style={{
@@ -40,9 +53,10 @@ function FolderRow({ folder, docs, docsHook }) {
           gap: 6,
           padding: "7px 10px",
           borderRadius: 9,
-          background: C.paper2,
-          border: `1px solid ${C.line}`,
+          background: dropOver ? C.accentSoft : C.paper2,
+          border: `1px solid ${dropOver ? C.accent : C.line}`,
           marginBottom: 4,
+          transition: "all .15s",
         }}
       >
         {/* 폴더 전체 선택 버튼 */}
@@ -223,6 +237,11 @@ function DocRow({
 
   return (
     <div
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData("docId", doc.id);
+        e.dataTransfer.effectAllowed = "move";
+      }}
       style={{
         background: C.card,
         borderRadius: 9,
@@ -231,6 +250,7 @@ function DocRow({
         display: "flex",
         alignItems: "center",
         gap: 8,
+        cursor: "grab",
       }}
     >
       {/* 검색 범위 토글 */}
@@ -431,7 +451,7 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
     setUploadMode,
     urlInput,
     setUrlInput,
-    uploadFile,
+    uploadFiles,
     uploadUrl,
     pageFrom,
     setPageFrom,
@@ -443,10 +463,25 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
 
   const inputRef = useRef(null);
   const [dragging, setDragging] = useState(false);
+  const [rootDropOver, setRootDropOver] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const [showNewFolder, setShowNewFolder] = useState(false);
+  const [docSearch, setDocSearch] = useState("");
 
-  const rootDocs = docs.filter((d) => !d.folderId);
+  const searchLower = docSearch.toLowerCase();
+  const filteredDocs = docSearch
+    ? docs.filter((d) => d.name.toLowerCase().includes(searchLower))
+    : docs;
+  const rootDocs = filteredDocs.filter((d) => !d.folderId);
+  const visibleFolders = docSearch
+    ? folders.filter(
+        (f) =>
+          f.name.toLowerCase().includes(searchLower) ||
+          filteredDocs.some((d) => d.folderId === f.id),
+      )
+    : folders;
+
+  const handleDocDrop = (docId, folderId) => moveDoc(docId, folderId);
 
   const handleCreateFolder = async () => {
     const name = newFolderName.trim();
@@ -515,7 +550,7 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
             onDrop={(e) => {
               e.preventDefault();
               setDragging(false);
-              if (!indexing) uploadFile(e.dataTransfer.files[0]);
+              if (!indexing) uploadFiles(e.dataTransfer.files);
             }}
             className="zone"
             style={{
@@ -562,9 +597,10 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
             <input
               ref={inputRef}
               type="file"
+              multiple
               accept=".pdf,.txt,.md,.docx"
               style={{ display: "none" }}
-              onChange={(e) => uploadFile(e.target.files[0])}
+              onChange={(e) => uploadFiles(e.target.files)}
             />
           </div>
 
@@ -819,6 +855,29 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
         )}
       </div>
 
+      {/* 문서 검색 */}
+      {docs.length > 0 && (
+        <div style={{ marginBottom: 10 }}>
+          <input
+            value={docSearch}
+            onChange={(e) => setDocSearch(e.target.value)}
+            placeholder="자료 검색…"
+            style={{
+              width: "100%",
+              padding: "6px 10px",
+              borderRadius: 8,
+              border: `1px solid ${C.line}`,
+              fontFamily: sans,
+              fontSize: 13,
+              background: C.card,
+              outline: "none",
+              boxSizing: "border-box",
+              color: C.ink,
+            }}
+          />
+        </div>
+      )}
+
       {/* 자료 목록 */}
       <div style={{ display: "grid", gap: 6 }}>
         {docs.length === 0 && !indexing && (
@@ -827,29 +886,70 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
           </div>
         )}
 
-        {/* 폴더 */}
-        {folders.map((folder) => (
-          <FolderRow key={folder.id} folder={folder} docs={docs} docsHook={docsHook} />
-        ))}
+        {docSearch && filteredDocs.length === 0 && (
+          <div style={{ color: C.inkSoft, fontSize: 13, padding: "6px 2px" }}>
+            일치하는 자료가 없어요.
+          </div>
+        )}
 
-        {/* 루트 문서 */}
-        {rootDocs.map((d) => (
-          <DocRow
-            key={d.id}
-            doc={d}
-            folders={folders}
-            renameId={renameId}
-            renameName={renameName}
-            setRenameName={setRenameName}
-            startRename={startRename}
-            cancelRename={cancelRename}
-            commitRename={commitRename}
-            selectedDocs={selectedDocs}
-            toggleDoc={toggleDoc}
-            removeDoc={removeDoc}
-            moveDoc={moveDoc}
+        {/* 폴더 */}
+        {visibleFolders.map((folder) => (
+          <FolderRow
+            key={folder.id}
+            folder={folder}
+            docs={filteredDocs}
+            docsHook={docsHook}
+            onDrop={handleDocDrop}
           />
         ))}
+
+        {/* 루트 문서 (드롭 영역) */}
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setRootDropOver(true);
+          }}
+          onDragLeave={() => setRootDropOver(false)}
+          onDrop={(e) => {
+            e.preventDefault();
+            setRootDropOver(false);
+            const docId = e.dataTransfer.getData("docId");
+            if (docId) handleDocDrop(docId, null);
+          }}
+          style={{
+            display: "grid",
+            gap: 6,
+            borderRadius: 9,
+            padding: rootDropOver ? "6px" : "0",
+            border: rootDropOver ? `2px dashed ${C.accent}` : "2px dashed transparent",
+            transition: "all .15s",
+          }}
+        >
+          {rootDocs.length === 0 && folders.length > 0 && (
+            <div
+              style={{ fontSize: 12, color: C.inkSoft, padding: "4px 6px", textAlign: "center" }}
+            >
+              여기로 드래그해서 루트로 이동
+            </div>
+          )}
+          {rootDocs.map((d) => (
+            <DocRow
+              key={d.id}
+              doc={d}
+              folders={folders}
+              renameId={renameId}
+              renameName={renameName}
+              setRenameName={setRenameName}
+              startRename={startRename}
+              cancelRename={cancelRename}
+              commitRename={commitRename}
+              selectedDocs={selectedDocs}
+              toggleDoc={toggleDoc}
+              removeDoc={removeDoc}
+              moveDoc={moveDoc}
+            />
+          ))}
+        </div>
       </div>
     </section>
   );
