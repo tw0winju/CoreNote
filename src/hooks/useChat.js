@@ -1,5 +1,15 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { postAsk, readSSE } from "../api";
+
+const SESSIONS_KEY = "corenote_sessions";
+
+const readSessions = () => {
+  try {
+    return JSON.parse(localStorage.getItem(SESSIONS_KEY) || "[]");
+  } catch {
+    return [];
+  }
+};
 
 export default function useChat() {
   const [question, setQuestion] = useState("");
@@ -10,6 +20,16 @@ export default function useChat() {
   const [conversation, setConversation] = useState([]);
   const [openConvSrc, setOpenConvSrc] = useState(null);
   const [copiedKey, setCopiedKey] = useState(null);
+  const [sessions, setSessions] = useState(readSessions);
+  const [showSessions, setShowSessions] = useState(false);
+  const [savingName, setSavingName] = useState("");
+  const [showSaveInput, setShowSaveInput] = useState(false);
+
+  const scrollRef = useRef(null);
+
+  const scrollToBottom = () => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  };
 
   const copyText = (text, key) => {
     navigator.clipboard
@@ -44,6 +64,39 @@ export default function useChat() {
     setOpenConvSrc(null);
   };
 
+  const saveSession = () => {
+    if (!conversation.length) return;
+    const name =
+      savingName.trim() ||
+      `세션 ${new Date().toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}`;
+    const session = {
+      id: Date.now().toString(),
+      name,
+      savedAt: Date.now(),
+      conversation: [...conversation],
+    };
+    const updated = [session, ...sessions];
+    setSessions(updated);
+    localStorage.setItem(SESSIONS_KEY, JSON.stringify(updated));
+    setSavingName("");
+    setShowSaveInput(false);
+  };
+
+  const loadSession = (session) => {
+    setConversation(session.conversation);
+    setResult(null);
+    setAskError("");
+    setOpenConvSrc(null);
+    setShowSessions(false);
+    setTimeout(scrollToBottom, 50);
+  };
+
+  const deleteSession = (id) => {
+    const updated = sessions.filter((s) => s.id !== id);
+    setSessions(updated);
+    localStorage.setItem(SESSIONS_KEY, JSON.stringify(updated));
+  };
+
   const ask = async (selectedDocs) => {
     const q = question.trim();
     if (!q || asking) return;
@@ -70,6 +123,7 @@ export default function useChat() {
         token: (e) => {
           answer += e.text;
           setResult((p) => ({ ...(p || { sources: [] }), answer }));
+          scrollToBottom();
         },
         sources: (e) => {
           sources = e.sources;
@@ -80,6 +134,7 @@ export default function useChat() {
       setConversation((prev) => [...prev, { q, a: answer, sources }]);
       setResult(null);
       setQuestion("");
+      setTimeout(scrollToBottom, 50);
     } catch (e) {
       setResult(null);
       setAskError(e.message || "질문 처리 중 오류가 발생했어요.");
@@ -104,5 +159,16 @@ export default function useChat() {
     exportConversation,
     clearConversation,
     ask,
+    scrollRef,
+    sessions,
+    showSessions,
+    setShowSessions,
+    savingName,
+    setSavingName,
+    showSaveInput,
+    setShowSaveInput,
+    saveSession,
+    loadSession,
+    deleteSession,
   };
 }

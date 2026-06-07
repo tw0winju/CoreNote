@@ -457,7 +457,7 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
   };
 
   return (
-    <section style={{ flex: "1 1 300px", minWidth: 280 }}>
+    <section style={{ width: "100%" }}>
       <h2
         style={{
           fontFamily: serif,

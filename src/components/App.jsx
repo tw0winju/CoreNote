@@ -23,11 +23,24 @@ export default function App() {
       style={{
         fontFamily: sans,
         color: C.ink,
-        minHeight: "100vh",
+        height: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
         background: `radial-gradient(circle at 18% 12%, ${C.paper2}, ${C.paper} 55%)`,
       }}
     >
-      <div style={{ maxWidth: 1040, margin: "0 auto", padding: "48px 22px 80px" }}>
+      {/* 상단 헤더 영역 */}
+      <div
+        style={{
+          flexShrink: 0,
+          maxWidth: 1080,
+          width: "100%",
+          margin: "0 auto",
+          padding: "28px 22px 14px",
+          boxSizing: "border-box",
+        }}
+      >
         <Header onSettings={() => settingsHook.setShowSettings(true)} />
 
         {settingsHook.showSettings && settingsHook.settingsForm && (
@@ -40,11 +53,35 @@ export default function App() {
         )}
 
         <WarningBanner health={docsHook.health} />
+      </div>
 
-        <div style={{ display: "flex", gap: 22, flexWrap: "wrap", alignItems: "flex-start" }}>
+      {/* 메인 2열 영역 */}
+      <div
+        style={{
+          flex: 1,
+          overflow: "hidden",
+          maxWidth: 1080,
+          width: "100%",
+          margin: "0 auto",
+          padding: "0 22px 16px",
+          boxSizing: "border-box",
+          display: "flex",
+          gap: 22,
+        }}
+      >
+        {/* 라이브러리 패널 (내부 스크롤) */}
+        <div
+          style={{
+            flex: "0 0 310px",
+            overflowY: "auto",
+            paddingRight: 4,
+          }}
+        >
           <Library docs={docsHook} indexing={indexingHook} />
-          <Chat chat={chatHook} docs={docsHook} />
         </div>
+
+        {/* 채팅 패널 */}
+        <Chat chat={chatHook} docs={docsHook} />
       </div>
     </div>
   );

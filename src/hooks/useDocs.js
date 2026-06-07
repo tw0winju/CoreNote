@@ -143,6 +143,7 @@ export default function useDocs() {
     folders,
     health,
     selectedDocs,
+    setSelectedDocs,
     renameId,
     renameName,
     setRenameName,
