@@ -196,7 +196,7 @@ async function extractTextOCR(buf, onProgress, pageFrom = null, pageTo = null) {
   const { createWorker } = await import("tesseract.js");
   const execFileAsync = promisify(execFile);
 
-  const CONCURRENCY = Math.min(4, os.cpus().length);
+  const CONCURRENCY = os.cpus().length; // 전체 코어 활용 (워커는 모델 1회 로드 후 재사용)
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "corenote-ocr-"));
   const pdfPath = path.join(tmpDir, "input.pdf");
   const outPrefix = path.join(tmpDir, "page");
