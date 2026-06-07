@@ -153,8 +153,8 @@ function cosine(a, b) {
 }
 
 async function extractPdfPages(buf, pageFrom, pageTo) {
-  const pdfjsLib = await import("pdfjs-dist");
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+  const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `file://${path.join(__dirname, "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs")}`;
   const pdfDoc = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
   const from = Math.max(1, pageFrom || 1);
   const to = Math.min(pdfDoc.numPages, pageTo || pdfDoc.numPages);
@@ -190,10 +190,10 @@ async function extractText(base64, filename = "", pageFrom = null, pageTo = null
 }
 
 async function extractTextOCR(buf, onProgress, pageFrom = null, pageTo = null) {
-  const pdfjsLib = await import("pdfjs-dist");
+  const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const { createCanvas } = await import("canvas");
   const { createWorker } = await import("tesseract.js");
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `file://${path.join(__dirname, "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs")}`;
   const pdfDoc = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
   const from = Math.max(1, pageFrom || 1);
   const to = Math.min(pdfDoc.numPages, pageTo || pdfDoc.numPages);
