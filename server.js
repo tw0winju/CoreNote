@@ -279,6 +279,36 @@ function rankOf(scores) {
   return rank;
 }
 
+// ---------- MMR (다양성 기반 선택) ----------
+function mmr(candidates, qvec, k, lambda = 0.7) {
+  if (candidates.length <= k) return candidates;
+  const vecs = candidates.map((c) => Array.from(c.vector));
+  const simQ = vecs.map((v) => cosine(qvec, v));
+  const selected = [];
+  const remaining = new Set(candidates.keys());
+
+  let first = [...remaining].reduce((b, i) => (simQ[i] > simQ[b] ? i : b), 0);
+  selected.push(first);
+  remaining.delete(first);
+
+  while (selected.length < k && remaining.size > 0) {
+    let bestScore = -Infinity,
+      bestIdx = -1;
+    for (const i of remaining) {
+      const maxSim = Math.max(...selected.map((j) => cosine(vecs[i], vecs[j])));
+      const score = lambda * simQ[i] - (1 - lambda) * maxSim;
+      if (score > bestScore) {
+        bestScore = score;
+        bestIdx = i;
+      }
+    }
+    if (bestIdx === -1) break;
+    selected.push(bestIdx);
+    remaining.delete(bestIdx);
+  }
+  return selected.map((i) => candidates[i]);
+}
+
 // ---------- LLM 재순위화 (G) ----------
 async function llmRerank(question, candidates) {
   const listing = candidates.map((c, i) => `[${i + 1}] ${c.text.slice(0, 300)}`).join("\n\n");
@@ -648,7 +678,9 @@ app.post("/api/ask", async (req, res) => {
       if (reranked) candidates = reranked;
     }
 
-    const scored = candidates.slice(0, settings.topK).map((c) => ({
+    // MMR로 다양성 확보 후 topK 선택
+    const diversified = mmr(candidates, qvec, settings.topK);
+    const scored = diversified.map((c) => ({
       c,
       score: cosine(qvec, Array.from(c.vector)),
     }));
@@ -666,7 +698,24 @@ app.post("/api/ask", async (req, res) => {
     });
 
     const docName = (c) => docs.find((d) => d.id === c.docId)?.name || c.docName;
-    const context = scored.map((s, i) => `[${i + 1}] (${docName(s.c)}) ${s.c.text}`).join("\n\n");
+
+    // 이웃 청크 확장: 앞뒤 청크 포함해 더 풍부한 컨텍스트 구성
+    const contextParts = await Promise.all(
+      scored.map(async ({ c }, i) => {
+        let text = c.text;
+        try {
+          const t = await getTable();
+          const neighbors = await t
+            .query()
+            .where(`docId = '${c.docId}' AND index >= ${c.index - 1} AND index <= ${c.index + 1}`)
+            .toArray();
+          neighbors.sort((a, b) => a.index - b.index);
+          if (neighbors.length > 1) text = neighbors.map((n) => n.text).join("\n");
+        } catch {}
+        return `[${i + 1}] (${docName(c)}) ${text}`;
+      }),
+    );
+    const context = contextParts.join("\n\n");
     const prompt = `아래 [참고자료]에 있는 내용만 근거로 사용자의 질문에 한국어로 답하세요.
 - 자료에 없는 내용은 지어내지 말고 "자료에서 찾을 수 없습니다"라고 답합니다.
 - 답에 사용한 근거는 문장 끝에 [번호] 형식으로 표시합니다.

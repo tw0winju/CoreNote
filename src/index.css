@@ -1,5 +1,27 @@
 @import url("https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=IBM+Plex+Sans+KR:wght@300;400;500;600;700&display=swap");
 
+:root {
+  --c-paper: #f4efe4;
+  --c-paper2: #ece4d3;
+  --c-ink: #221d15;
+  --c-ink-soft: #6a5f4d;
+  --c-accent: #b5512a;
+  --c-accent-soft: #ecd7c0;
+  --c-line: #d9cfbb;
+  --c-card: #fcf9f1;
+}
+
+[data-theme="dark"] {
+  --c-paper: #1c1a16;
+  --c-paper2: #242019;
+  --c-ink: #e8dfc8;
+  --c-ink-soft: #9e9078;
+  --c-accent: #d4733d;
+  --c-accent-soft: #3d2618;
+  --c-line: #3a3228;
+  --c-card: #211e18;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -10,9 +32,10 @@ body,
 }
 body {
   margin: 0;
-  background: #f4efe4;
+  background: var(--c-paper);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  transition: background 0.2s;
 }
 button {
   font-family: "IBM Plex Sans KR", sans-serif;
@@ -43,8 +66,8 @@ button {
 }
 
 .zone:hover {
-  border-color: #b5512a !important;
-  background: #fcf9f1 !important;
+  border-color: var(--c-accent) !important;
+  background: var(--c-card) !important;
 }
 .qcard:hover {
   box-shadow: 0 6px 22px -12px rgba(90, 60, 30, 0.35);

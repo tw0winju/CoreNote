@@ -1,7 +1,9 @@
-import { useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { postAsk, readSSE } from "../api";
 
 const SESSIONS_KEY = "corenote_sessions";
+const CONV_DRAFT_KEY = "corenote_conv_draft";
+const HISTORY_KEY = "corenote_q_history";
 
 const readSessions = () => {
   try {
@@ -17,13 +19,54 @@ export default function useChat() {
   const [askError, setAskError] = useState("");
   const [result, setResult] = useState(null);
   const [openSrc, setOpenSrc] = useState(null);
-  const [conversation, setConversation] = useState([]);
   const [openConvSrc, setOpenConvSrc] = useState(null);
   const [copiedKey, setCopiedKey] = useState(null);
   const [sessions, setSessions] = useState(readSessions);
   const [showSessions, setShowSessions] = useState(false);
   const [savingName, setSavingName] = useState("");
   const [showSaveInput, setShowSaveInput] = useState(false);
+
+  // 대화 임시 저장 (세션 새로고침 복원)
+  const [conversation, setConversation] = useState(() => {
+    try {
+      return JSON.parse(sessionStorage.getItem(CONV_DRAFT_KEY) || "[]");
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    sessionStorage.setItem(CONV_DRAFT_KEY, JSON.stringify(conversation));
+  }, [conversation]);
+
+  // 질문 히스토리
+  const [questionHistory, setQuestionHistory] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
+    } catch {
+      return [];
+    }
+  });
+  const [historyIdx, setHistoryIdx] = useState(-1);
+  const historyDraftRef = useRef("");
+
+  const navigateHistory = (dir) => {
+    if (dir < 0) {
+      // 이전 질문으로
+      if (historyIdx === -1) historyDraftRef.current = question;
+      const next = Math.min(historyIdx + 1, questionHistory.length - 1);
+      if (next >= 0) {
+        setHistoryIdx(next);
+        setQuestion(questionHistory[next]);
+      }
+    } else {
+      // 최근 질문으로
+      if (historyIdx === -1) return;
+      const next = historyIdx - 1;
+      setHistoryIdx(next);
+      setQuestion(next === -1 ? historyDraftRef.current : questionHistory[next]);
+    }
+  };
 
   const scrollRef = useRef(null);
 
@@ -62,6 +105,7 @@ export default function useChat() {
     setResult(null);
     setAskError("");
     setOpenConvSrc(null);
+    sessionStorage.removeItem(CONV_DRAFT_KEY);
   };
 
   const saveSession = () => {
@@ -102,6 +146,14 @@ export default function useChat() {
     setAskError("");
     setResult(null);
     setOpenSrc(null);
+    setHistoryIdx(-1);
+
+    // 히스토리 저장
+    setQuestionHistory((prev) => {
+      const next = [q, ...prev.filter((h) => h !== q)].slice(0, 50);
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
+      return next;
+    });
 
     try {
       const r = await postAsk(q, history, selectedDocs);
@@ -175,6 +227,7 @@ export default function useChat() {
     clearConversation,
     ask,
     regenerate,
+    navigateHistory,
     scrollRef,
     sessions,
     showSessions,

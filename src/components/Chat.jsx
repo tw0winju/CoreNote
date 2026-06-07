@@ -3,6 +3,37 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { C, sans } from "../theme";
 
+// 출처 [N] 인용 번호 클릭 가능하게 변환
+function processCitations(children, onCitationClick) {
+  if (!onCitationClick) return children;
+  return (Array.isArray(children) ? children : [children]).map((child, ci) => {
+    if (typeof child === "string") {
+      const parts = child.split(/(\[\d+\])/);
+      if (parts.length === 1) return child;
+      return parts.map((part, i) => {
+        const m = part.match(/^\[(\d+)\]$/);
+        if (m) {
+          return (
+            <sup
+              key={`${ci}-${i}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onCitationClick(Number(m[1]));
+              }}
+              title={`출처 ${m[1]} 보기`}
+              style={{ color: C.accent, fontWeight: 700, cursor: "pointer", userSelect: "none" }}
+            >
+              {part}
+            </sup>
+          );
+        }
+        return part;
+      });
+    }
+    return child;
+  });
+}
+
 function highlight(text, query) {
   if (!query || !text) return text;
   const words = query
@@ -23,11 +54,19 @@ function highlight(text, query) {
   );
 }
 
-const mdComponents = (C) => ({
-  p: ({ children }) => <p style={{ margin: "0 0 8px", lineHeight: 1.75 }}>{children}</p>,
+const mdComponents = (onCitationClick) => ({
+  p: ({ children }) => (
+    <p style={{ margin: "0 0 8px", lineHeight: 1.75 }}>
+      {processCitations(children, onCitationClick)}
+    </p>
+  ),
+  li: ({ children }) => (
+    <li style={{ margin: "2px 0", lineHeight: 1.6 }}>
+      {processCitations(children, onCitationClick)}
+    </li>
+  ),
   ul: ({ children }) => <ul style={{ paddingLeft: 20, margin: "4px 0 8px" }}>{children}</ul>,
   ol: ({ children }) => <ol style={{ paddingLeft: 20, margin: "4px 0 8px" }}>{children}</ol>,
-  li: ({ children }) => <li style={{ margin: "2px 0", lineHeight: 1.6 }}>{children}</li>,
   h1: ({ children }) => (
     <h1 style={{ fontSize: 17, fontWeight: 700, margin: "14px 0 6px" }}>{children}</h1>
   ),
@@ -122,8 +161,8 @@ function CopyButton({ text, id, copiedKey, onCopy }) {
   );
 }
 
-function AnswerBubble({ text, id, copiedKey, onCopy, streaming }) {
-  const components = mdComponents(C);
+function AnswerBubble({ text, id, copiedKey, onCopy, streaming, onCitationClick }) {
+  const components = mdComponents(onCitationClick);
   return (
     <div
       style={{
@@ -220,6 +259,7 @@ export default function Chat({ chat, docs: docsHook }) {
     clearConversation,
     ask,
     regenerate,
+    navigateHistory,
     scrollRef,
   } = chat;
 
@@ -294,7 +334,6 @@ export default function Chat({ chat, docs: docsHook }) {
           gap: 20,
         }}
       >
-        {/* 대화가 없을 때 안내 */}
         {conversation.length === 0 && !asking && !result && (
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <div style={{ textAlign: "center", color: C.inkSoft, fontSize: 14, lineHeight: 2 }}>
@@ -306,9 +345,10 @@ export default function Chat({ chat, docs: docsHook }) {
           </div>
         )}
 
-        {/* 대화 기록 */}
         {conversation.map((item, idx) => {
           const isLast = idx === conversation.length - 1;
+          const handleCitation = (n) => setOpenConvSrc({ turn: idx, srcN: n });
+
           return (
             <div key={idx} style={{ display: "grid", gap: 8 }}>
               {/* 질문 버블 */}
@@ -329,13 +369,14 @@ export default function Chat({ chat, docs: docsHook }) {
                 {item.q}
               </div>
 
-              {/* 답변 버블 */}
+              {/* 답변 */}
               <AnswerBubble
                 text={item.a}
                 id={idx}
                 copiedKey={copiedKey}
                 onCopy={copyText}
                 streaming={false}
+                onCitationClick={handleCitation}
               />
 
               {/* 재생성 버튼 (마지막 항목) */}
@@ -442,15 +483,14 @@ export default function Chat({ chat, docs: docsHook }) {
             >
               {question}
             </div>
-
             <AnswerBubble
               text={result.answer || ""}
               id="current"
               copiedKey={copiedKey}
               onCopy={copyText}
               streaming={true}
+              onCitationClick={(n) => setOpenSrc(n)}
             />
-
             {result.sources?.length > 0 && (
               <div>
                 <div
@@ -483,7 +523,7 @@ export default function Chat({ chat, docs: docsHook }) {
         <div style={{ flexShrink: 0, height: 1 }} />
       </div>
 
-      {/* ── 입력 영역 (하단 고정) ── */}
+      {/* ── 입력 영역 ── */}
       <div style={{ flexShrink: 0, paddingTop: 10 }}>
         {selectedDocs.size > 0 && (
           <div style={{ fontSize: 12.5, color: C.accent, marginBottom: 7 }}>
@@ -499,11 +539,30 @@ export default function Chat({ chat, docs: docsHook }) {
 
         <textarea
           value={question}
-          onChange={(e) => setQuestion(e.target.value)}
-          onKeyDown={(e) => {
-            if ((e.ctrlKey || e.metaKey) && e.key === "Enter") ask(selectedDocs);
+          onChange={(e) => {
+            setQuestion(e.target.value);
           }}
-          placeholder="내 자료에 대해 물어보세요. (Ctrl+Enter로 질문)"
+          onKeyDown={(e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+              ask(selectedDocs);
+              return;
+            }
+            // ↑: 커서가 맨 앞일 때 이전 질문
+            if (e.key === "ArrowUp" && e.target.selectionStart === 0 && !e.shiftKey) {
+              e.preventDefault();
+              navigateHistory(-1);
+            }
+            // ↓: 커서가 맨 뒤일 때 다음 질문
+            if (
+              e.key === "ArrowDown" &&
+              e.target.selectionStart === e.target.value.length &&
+              !e.shiftKey
+            ) {
+              e.preventDefault();
+              navigateHistory(1);
+            }
+          }}
+          placeholder="내 자료에 대해 물어보세요. (Ctrl+Enter로 질문 / ↑↓ 이전 질문)"
           rows={3}
           style={{
             width: "100%",

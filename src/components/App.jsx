@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { C, sans } from "../theme";
 import useDocs from "../hooks/useDocs";
 import useIndexing from "../hooks/useIndexing";
@@ -10,6 +11,13 @@ import Library from "./Library";
 import Chat from "./Chat";
 
 export default function App() {
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem("corenote_theme") === "dark");
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", darkMode ? "dark" : "light");
+    localStorage.setItem("corenote_theme", darkMode ? "dark" : "light");
+  }, [darkMode]);
+
   const docsHook = useDocs();
   const settingsHook = useSettings(docsHook.loadHealth);
   const indexingHook = useIndexing(async () => {
@@ -38,10 +46,8 @@ export default function App() {
         />
       )}
 
-      {/* 세션 사이드바 */}
       <SessionSidebar chat={chatHook} />
 
-      {/* 메인 영역 */}
       <div
         style={{
           flex: 1,
@@ -51,7 +57,7 @@ export default function App() {
           background: `radial-gradient(circle at 60% 10%, ${C.paper2}, ${C.paper} 60%)`,
         }}
       >
-        {/* 상단바: 경고 + 설정 */}
+        {/* 상단바 */}
         <div
           style={{
             flexShrink: 0,
@@ -64,6 +70,26 @@ export default function App() {
           <div style={{ flex: 1 }}>
             <WarningBanner health={docsHook.health} />
           </div>
+
+          {/* 다크모드 토글 */}
+          <button
+            onClick={() => setDarkMode((v) => !v)}
+            title={darkMode ? "라이트 모드" : "다크 모드"}
+            style={{
+              border: `1px solid ${C.line}`,
+              background: "transparent",
+              color: C.inkSoft,
+              borderRadius: 8,
+              padding: "5px 10px",
+              fontSize: 15,
+              cursor: "pointer",
+              flexShrink: 0,
+              lineHeight: 1,
+            }}
+          >
+            {darkMode ? "☀" : "☾"}
+          </button>
+
           <button
             onClick={() => settingsHook.setShowSettings(true)}
             title="설정"
@@ -93,12 +119,9 @@ export default function App() {
             gap: 20,
           }}
         >
-          {/* 라이브러리 */}
           <div style={{ flex: "0 0 300px", overflowY: "auto", paddingRight: 4 }}>
             <Library docs={docsHook} indexing={indexingHook} />
           </div>
-
-          {/* 채팅 */}
           <Chat chat={chatHook} docs={docsHook} />
         </div>
       </div>
