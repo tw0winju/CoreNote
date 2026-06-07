@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { C, sans, serif } from "../theme";
 
 export default function Library({ docs: docsHook, indexing: indexingHook }) {
@@ -32,6 +32,7 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
   } = indexingHook;
 
   const inputRef = useRef(null);
+  const [dragging, setDragging] = useState(false);
 
   return (
     <section style={{ flex: "1 1 300px", minWidth: 280 }}>
@@ -80,15 +81,30 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
         <>
           <div
             onClick={() => !indexing && inputRef.current?.click()}
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (!indexing) setDragging(true);
+            }}
+            onDragEnter={(e) => {
+              e.preventDefault();
+              if (!indexing) setDragging(true);
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragging(false);
+              if (!indexing) uploadFile(e.dataTransfer.files[0]);
+            }}
             className="zone"
             style={{
-              border: `2px dashed ${C.line}`,
+              border: `2px dashed ${dragging ? C.accent : C.line}`,
               borderRadius: 14,
               padding: "20px 16px",
               textAlign: "center",
               cursor: indexing ? "default" : "pointer",
               marginBottom: 14,
               transition: "all .2s",
+              background: dragging ? C.accentSoft : "transparent",
             }}
           >
             {indexing ? (
