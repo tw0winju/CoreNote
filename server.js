@@ -24,7 +24,14 @@ const OLD_STORE_PATH = path.join(DATA_DIR, "store.json");
 const SETTINGS_PATH = path.join(DATA_DIR, "settings.json");
 
 app.use(cors());
-app.use(express.json({ limit: "64mb" }));
+app.use(express.json({ limit: "300mb" }));
+
+// JSON 파싱 오류(413 Too Large 등)를 HTML 대신 JSON으로 반환
+app.use((err, req, res, next) => {
+  if (err.type === "entity.too.large")
+    return res.status(413).json({ error: "파일이 너무 큽니다. 페이지 범위를 나눠서 색인하세요." });
+  next(err);
+});
 
 // ---------- 설정 ----------
 const DEFAULT_SETTINGS = {

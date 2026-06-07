@@ -54,8 +54,15 @@ export default function useIndexing(onIndexed) {
         const base64 = await readBase64(arr[i]);
         const r = await postIndexFile(base64, arr[i].name, from, to, targetFolderId);
         if (!r.ok) {
-          const d = await r.json();
-          throw new Error(d.error || "색인 실패");
+          let msg = "색인 실패";
+          try {
+            const d = await r.json();
+            msg = d.error || msg;
+          } catch {
+            if (r.status === 413) msg = "파일이 너무 큽니다. 페이지 범위를 나눠서 색인하세요.";
+            else msg = `서버 오류 (${r.status})`;
+          }
+          throw new Error(msg);
         }
         await processSSE(r);
       }
@@ -86,8 +93,14 @@ export default function useIndexing(onIndexed) {
     try {
       const r = await postIndexUrl(url, targetFolderId);
       if (!r.ok) {
-        const d = await r.json();
-        throw new Error(d.error || "색인 실패");
+        let msg = "색인 실패";
+        try {
+          const d = await r.json();
+          msg = d.error || msg;
+        } catch {
+          msg = `서버 오류 (${r.status})`;
+        }
+        throw new Error(msg);
       }
       await processSSE(r);
       setUrlInput("");
