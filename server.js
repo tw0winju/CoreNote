@@ -190,32 +190,46 @@ async function extractText(base64, filename = "", pageFrom = null, pageTo = null
 }
 
 async function extractTextOCR(buf, onProgress, pageFrom = null, pageTo = null) {
-  const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const { createCanvas } = await import("canvas");
+  const os = await import("os");
+  const { execFile } = await import("child_process");
+  const { promisify } = await import("util");
   const { createWorker } = await import("tesseract.js");
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `file://${path.join(__dirname, "node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs")}`;
-  const pdfDoc = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
-  const from = Math.max(1, pageFrom || 1);
-  const to = Math.min(pdfDoc.numPages, pageTo || pdfDoc.numPages);
-  const worker = await createWorker("kor+eng");
-  let fullText = "";
+  const execFileAsync = promisify(execFile);
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "corenote-ocr-"));
+  const pdfPath = path.join(tmpDir, "input.pdf");
+  const outPrefix = path.join(tmpDir, "page");
   try {
-    for (let pageNum = from; pageNum <= to; pageNum++) {
-      const page = await pdfDoc.getPage(pageNum);
-      const viewport = page.getViewport({ scale: 2.0 });
-      const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
-      const ctx = canvas.getContext("2d");
-      await page.render({ canvasContext: ctx, viewport }).promise;
-      const {
-        data: { text },
-      } = await worker.recognize(canvas.toBuffer("image/png"));
-      fullText += text + "\n\n";
-      if (onProgress) onProgress(pageNum - from + 1, to - from + 1);
+    fs.writeFileSync(pdfPath, buf);
+
+    // pdftoppm으로 PDF 페이지 → PNG 변환 (pdfjs canvas 렌더링 우회)
+    const args = ["-r", "200", "-png"];
+    if (pageFrom) args.push("-f", String(pageFrom));
+    if (pageTo) args.push("-l", String(pageTo));
+    args.push(pdfPath, outPrefix);
+    await execFileAsync("pdftoppm", args);
+
+    const pngFiles = fs
+      .readdirSync(tmpDir)
+      .filter((f) => f.endsWith(".png"))
+      .sort();
+    if (!pngFiles.length) throw new Error("PDF 페이지 이미지 변환 실패");
+
+    const worker = await createWorker("kor+eng");
+    let fullText = "";
+    try {
+      for (let i = 0; i < pngFiles.length; i++) {
+        const { data: { text } } = await worker.recognize(path.join(tmpDir, pngFiles[i]));
+        fullText += text + "\n\n";
+        if (onProgress) onProgress(i + 1, pngFiles.length);
+      }
+    } finally {
+      await worker.terminate();
     }
+    return fullText.trim();
   } finally {
-    await worker.terminate();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   }
-  return fullText.trim();
 }
 
 // ---------- Ollama 호출 ----------
