@@ -11,11 +11,16 @@ export const patchDocName = (id, name) =>
   });
 
 // ── 색인 ──────────────────────────────────────────────────────────────────────
-export const postIndexFile = (base64, filename) =>
+export const postIndexFile = (base64, filename, pageFrom = null, pageTo = null) =>
   fetch("/api/index", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ file: base64, filename }),
+    body: JSON.stringify({
+      file: base64,
+      filename,
+      ...(pageFrom != null && { pageFrom }),
+      ...(pageTo != null && { pageTo }),
+    }),
   });
 
 export const postIndexUrl = (url) =>

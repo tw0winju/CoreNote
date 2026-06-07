@@ -8,6 +8,8 @@ export default function useIndexing(onIndexed) {
   const [indexProgress, setIndexProgress] = useState(null);
   const [uploadMode, setUploadMode] = useState("file");
   const [urlInput, setUrlInput] = useState("");
+  const [pageFrom, setPageFrom] = useState("");
+  const [pageTo, setPageTo] = useState("");
 
   const begin = () => {
     setIndexing(true);
@@ -53,7 +55,16 @@ export default function useIndexing(onIndexed) {
       return;
     }
     const reader = new FileReader();
-    reader.onload = () => run(() => postIndexFile(String(reader.result).split(",")[1], f.name));
+    const from = pageFrom ? Number(pageFrom) : null;
+    const to = pageTo ? Number(pageTo) : null;
+    reader.onload = () =>
+      run(
+        () => postIndexFile(String(reader.result).split(",")[1], f.name, from, to),
+        () => {
+          setPageFrom("");
+          setPageTo("");
+        },
+      );
     reader.onerror = () => setIndexError("파일을 읽지 못했어요.");
     reader.readAsDataURL(f);
   };
@@ -83,5 +94,9 @@ export default function useIndexing(onIndexed) {
     setUrlInput,
     uploadFile,
     uploadUrl,
+    pageFrom,
+    setPageFrom,
+    pageTo,
+    setPageTo,
   };
 }

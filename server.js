@@ -138,7 +138,22 @@ function cosine(a, b) {
   return dot / (Math.sqrt(na) * Math.sqrt(nb) + 1e-8);
 }
 
-async function extractText(base64, filename = "") {
+async function extractPdfPages(buf, pageFrom, pageTo) {
+  const pdfjsLib = await import("pdfjs-dist");
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+  const pdfDoc = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
+  const from = Math.max(1, pageFrom || 1);
+  const to = Math.min(pdfDoc.numPages, pageTo || pdfDoc.numPages);
+  let fullText = "";
+  for (let pageNum = from; pageNum <= to; pageNum++) {
+    const page = await pdfDoc.getPage(pageNum);
+    const content = await page.getTextContent();
+    fullText += content.items.map((item) => item.str).join(" ") + "\n\n";
+  }
+  return fullText.trim();
+}
+
+async function extractText(base64, filename = "", pageFrom = null, pageTo = null) {
   const ext = path.extname(filename).toLowerCase();
   const buf = Buffer.from(base64, "base64");
   const normalize = (s) =>
@@ -151,23 +166,27 @@ async function extractText(base64, filename = "") {
     const { extractRawText } = await import("mammoth");
     return normalize((await extractRawText({ buffer: buf })).value || "");
   }
+  if (ext === ".pdf" && (pageFrom || pageTo)) {
+    return normalize(await extractPdfPages(buf, pageFrom, pageTo));
+  }
   const parser = new PDFParse({ data: new Uint8Array(buf) });
   const r = await parser.getText();
   if (parser.destroy) await parser.destroy();
   return normalize(r.text || "");
 }
 
-async function extractTextOCR(buf, onProgress) {
+async function extractTextOCR(buf, onProgress, pageFrom = null, pageTo = null) {
   const pdfjsLib = await import("pdfjs-dist");
   const { createCanvas } = await import("canvas");
   const { createWorker } = await import("tesseract.js");
   pdfjsLib.GlobalWorkerOptions.workerSrc = "";
   const pdfDoc = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
-  const numPages = pdfDoc.numPages;
+  const from = Math.max(1, pageFrom || 1);
+  const to = Math.min(pdfDoc.numPages, pageTo || pdfDoc.numPages);
   const worker = await createWorker("kor+eng");
   let fullText = "";
   try {
-    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+    for (let pageNum = from; pageNum <= to; pageNum++) {
       const page = await pdfDoc.getPage(pageNum);
       const viewport = page.getViewport({ scale: 2.0 });
       const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
@@ -177,7 +196,7 @@ async function extractTextOCR(buf, onProgress) {
         data: { text },
       } = await worker.recognize(canvas.toBuffer("image/png"));
       fullText += text + "\n\n";
-      if (onProgress) onProgress(pageNum, numPages);
+      if (onProgress) onProgress(pageNum - from + 1, to - from + 1);
     }
   } finally {
     await worker.terminate();
@@ -338,20 +357,30 @@ function sseErr(send, e) {
 
 // ---------- 1) 문서 색인 (파일) ----------
 app.post("/api/index", async (req, res) => {
-  const { file, pdf, filename } = req.body;
+  const { file, pdf, filename, pageFrom, pageTo } = req.body;
   const fileData = file || pdf;
   if (!fileData) return res.status(400).json({ error: "파일 데이터가 없습니다." });
 
-  const hash = crypto.createHash("sha256").update(Buffer.from(fileData, "base64")).digest("hex");
+  // 페이지 범위를 해시에 포함 → 같은 파일을 다른 범위로 색인 허용
+  const rangeKey = pageFrom || pageTo ? `|${pageFrom ?? 1}-${pageTo ?? "end"}` : "";
+  const hash = crypto
+    .createHash("sha256")
+    .update(Buffer.from(fileData, "base64"))
+    .update(rangeKey)
+    .digest("hex");
   const dup = docs.find((d) => d.hash === hash);
   if (dup) return res.status(409).json({ error: `이미 추가된 문서입니다. (${dup.name})` });
 
   const ext = path.extname(filename || "").toLowerCase();
   const buf = Buffer.from(fileData, "base64");
 
+  const baseName = filename || "문서";
+  const docName =
+    pageFrom || pageTo ? `${baseName} (${pageFrom ?? 1}~${pageTo ?? "끝"}페이지)` : baseName;
+
   let text;
   try {
-    text = await extractText(fileData, filename || "");
+    text = await extractText(fileData, filename || "", pageFrom ?? null, pageTo ?? null);
   } catch (e) {
     console.error("[extract]", e);
     return res.status(422).json({ error: "파일에서 텍스트를 추출하지 못했습니다." });
@@ -371,9 +400,14 @@ app.post("/api/index", async (req, res) => {
     if (needsOCR) {
       send({ type: "status", message: "스캔 PDF 감지 — OCR 시작 중…" });
       try {
-        text = await extractTextOCR(buf, (cur, total) => {
-          send({ type: "status", message: `OCR 중… (${cur}/${total} 페이지)` });
-        });
+        text = await extractTextOCR(
+          buf,
+          (cur, total) => {
+            send({ type: "status", message: `OCR 중… (${cur}/${total} 페이지)` });
+          },
+          pageFrom ?? null,
+          pageTo ?? null,
+        );
       } catch (e) {
         console.error("[ocr]", e);
         send({ type: "error", error: "OCR 처리 중 오류가 발생했습니다." });
@@ -387,8 +421,8 @@ app.post("/api/index", async (req, res) => {
         return res.end();
       }
     }
-    const { docId, chunkCount } = await indexTextSSE(text, filename || "문서", hash, send);
-    send({ type: "done", docId, name: filename || "문서", chunkCount });
+    const { docId, chunkCount } = await indexTextSSE(text, docName, hash, send);
+    send({ type: "done", docId, name: docName, chunkCount });
     res.end();
   } catch (e) {
     sseErr(send, e);

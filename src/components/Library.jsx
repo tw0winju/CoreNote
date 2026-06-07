@@ -25,6 +25,10 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
     setUrlInput,
     uploadFile,
     uploadUrl,
+    pageFrom,
+    setPageFrom,
+    pageTo,
+    setPageTo,
   } = indexingHook;
 
   const inputRef = useRef(null);
@@ -73,57 +77,110 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
 
       {/* 파일 업로드 */}
       {uploadMode === "file" ? (
-        <div
-          onClick={() => !indexing && inputRef.current?.click()}
-          className="zone"
-          style={{
-            border: `2px dashed ${C.line}`,
-            borderRadius: 14,
-            padding: "20px 16px",
-            textAlign: "center",
-            cursor: indexing ? "default" : "pointer",
-            marginBottom: 14,
-            transition: "all .2s",
-          }}
-        >
-          {indexing ? (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 10,
-                color: C.inkSoft,
-                fontSize: 14,
-              }}
-            >
-              <span
-                className="spin"
+        <>
+          <div
+            onClick={() => !indexing && inputRef.current?.click()}
+            className="zone"
+            style={{
+              border: `2px dashed ${C.line}`,
+              borderRadius: 14,
+              padding: "20px 16px",
+              textAlign: "center",
+              cursor: indexing ? "default" : "pointer",
+              marginBottom: 14,
+              transition: "all .2s",
+            }}
+          >
+            {indexing ? (
+              <div
                 style={{
-                  width: 18,
-                  height: 18,
-                  border: `2px solid ${C.accentSoft}`,
-                  borderTopColor: C.accent,
-                  borderRadius: "50%",
-                  display: "inline-block",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 10,
+                  color: C.inkSoft,
+                  fontSize: 14,
                 }}
-              />
-              {spinnerMsg}
-            </div>
-          ) : (
-            <div style={{ color: C.inkSoft, fontSize: 14 }}>
-              <b style={{ color: C.accent }}>＋ 자료 추가</b>
-              <div style={{ fontSize: 12.5, marginTop: 3 }}>PDF · TXT · MD · DOCX</div>
-            </div>
-          )}
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".pdf,.txt,.md,.docx"
-            style={{ display: "none" }}
-            onChange={(e) => uploadFile(e.target.files[0])}
-          />
-        </div>
+              >
+                <span
+                  className="spin"
+                  style={{
+                    width: 18,
+                    height: 18,
+                    border: `2px solid ${C.accentSoft}`,
+                    borderTopColor: C.accent,
+                    borderRadius: "50%",
+                    display: "inline-block",
+                  }}
+                />
+                {spinnerMsg}
+              </div>
+            ) : (
+              <div style={{ color: C.inkSoft, fontSize: 14 }}>
+                <b style={{ color: C.accent }}>＋ 자료 추가</b>
+                <div style={{ fontSize: 12.5, marginTop: 3 }}>PDF · TXT · MD · DOCX</div>
+              </div>
+            )}
+            <input
+              ref={inputRef}
+              type="file"
+              accept=".pdf,.txt,.md,.docx"
+              style={{ display: "none" }}
+              onChange={(e) => uploadFile(e.target.files[0])}
+            />
+          </div>
+          {/* PDF 페이지 범위 (선택) */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              marginBottom: 14,
+              fontSize: 13,
+              color: C.inkSoft,
+            }}
+          >
+            <span>PDF 페이지</span>
+            <input
+              type="number"
+              min={1}
+              value={pageFrom}
+              onChange={(e) => setPageFrom(e.target.value)}
+              placeholder="시작"
+              disabled={indexing}
+              style={{
+                width: 58,
+                padding: "4px 8px",
+                borderRadius: 7,
+                border: `1px solid ${C.line}`,
+                fontFamily: sans,
+                fontSize: 13,
+                background: C.card,
+                outline: "none",
+              }}
+            />
+            <span>~</span>
+            <input
+              type="number"
+              min={1}
+              value={pageTo}
+              onChange={(e) => setPageTo(e.target.value)}
+              placeholder="끝"
+              disabled={indexing}
+              style={{
+                width: 58,
+                padding: "4px 8px",
+                borderRadius: 7,
+                border: `1px solid ${C.line}`,
+                fontFamily: sans,
+                fontSize: 13,
+                background: C.card,
+                outline: "none",
+              }}
+            />
+            <span style={{ fontSize: 12 }}>선택</span>
+          </div>
+        </>
       ) : (
         /* URL 색인 */
         <div style={{ marginBottom: 14 }}>
