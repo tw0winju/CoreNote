@@ -196,14 +196,15 @@ async function extractTextOCR(buf, onProgress, pageFrom = null, pageTo = null) {
   const { createWorker } = await import("tesseract.js");
   const execFileAsync = promisify(execFile);
 
+  const CONCURRENCY = Math.min(4, os.cpus().length);
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "corenote-ocr-"));
   const pdfPath = path.join(tmpDir, "input.pdf");
   const outPrefix = path.join(tmpDir, "page");
   try {
     fs.writeFileSync(pdfPath, buf);
 
-    // pdftoppm으로 PDF 페이지 → PNG 변환 (pdfjs canvas 렌더링 우회)
-    const args = ["-r", "200", "-png"];
+    // 150dpi: 200dpi 대비 이미지 44% 축소 → OCR 속도 향상, 인쇄 텍스트 인식에 충분
+    const args = ["-r", "150", "-png"];
     if (pageFrom) args.push("-f", String(pageFrom));
     if (pageTo) args.push("-l", String(pageTo));
     args.push(pdfPath, outPrefix);
@@ -215,18 +216,27 @@ async function extractTextOCR(buf, onProgress, pageFrom = null, pageTo = null) {
       .sort();
     if (!pngFiles.length) throw new Error("PDF 페이지 이미지 변환 실패");
 
-    const worker = await createWorker("kor+eng");
-    let fullText = "";
+    // 병렬 워커로 OCR (4x 동시 처리)
+    const workers = await Promise.all(
+      Array.from({ length: CONCURRENCY }, () => createWorker("kor+eng")),
+    );
+    const results = new Array(pngFiles.length).fill("");
+    let completed = 0;
     try {
-      for (let i = 0; i < pngFiles.length; i++) {
-        const { data: { text } } = await worker.recognize(path.join(tmpDir, pngFiles[i]));
-        fullText += text + "\n\n";
-        if (onProgress) onProgress(i + 1, pngFiles.length);
-      }
+      await Promise.all(
+        workers.map(async (worker, wi) => {
+          for (let i = wi; i < pngFiles.length; i += CONCURRENCY) {
+            const { data: { text } } = await worker.recognize(path.join(tmpDir, pngFiles[i]));
+            results[i] = text;
+            completed++;
+            if (onProgress) onProgress(completed, pngFiles.length);
+          }
+        }),
+      );
     } finally {
-      await worker.terminate();
+      await Promise.all(workers.map((w) => w.terminate()));
     }
-    return fullText.trim();
+    return results.join("\n\n").trim();
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
