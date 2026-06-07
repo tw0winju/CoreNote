@@ -52,16 +52,21 @@ function saveSettings() {
 // ---------- 문서 메타 ----------
 function loadDocs() {
   try {
-    if (fs.existsSync(DOCS_PATH)) return JSON.parse(fs.readFileSync(DOCS_PATH, "utf8"));
+    if (fs.existsSync(DOCS_PATH)) {
+      const raw = JSON.parse(fs.readFileSync(DOCS_PATH, "utf8"));
+      // 구버전 배열 포맷 → 새 포맷으로 마이그레이션
+      if (Array.isArray(raw)) return { docs: raw, folders: [] };
+      return { docs: raw.docs || [], folders: raw.folders || [] };
+    }
   } catch (e) {
     console.error("[docs load]", e);
   }
-  return [];
+  return { docs: [], folders: [] };
 }
-let docs = loadDocs();
+let { docs, folders } = loadDocs();
 function saveDocs() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(DOCS_PATH, JSON.stringify(docs));
+  fs.writeFileSync(DOCS_PATH, JSON.stringify({ docs, folders }));
 }
 
 // ---------- LanceDB ----------
@@ -312,7 +317,7 @@ async function llmRerank(question, candidates) {
 }
 
 // ---------- 공통 색인 로직 ----------
-async function indexTextSSE(text, name, hash, send) {
+async function indexTextSSE(text, name, hash, send, folderId = null) {
   const rawChunks = chunkText(text, settings.maxChunkChars);
   const chunks = rawChunks.map((chunk, i) =>
     i === 0 || OVERLAP_CHARS <= 0 ? chunk : rawChunks[i - 1].slice(-OVERLAP_CHARS) + "\n\n" + chunk,
@@ -337,7 +342,14 @@ async function indexTextSSE(text, name, hash, send) {
     send({ type: "progress", done: Math.min(i + BATCH, total), total });
   }
   await addToTable(records);
-  docs.push({ id: docId, name, addedAt: Date.now(), chunkCount: chunks.length, hash });
+  docs.push({
+    id: docId,
+    name,
+    addedAt: Date.now(),
+    chunkCount: chunks.length,
+    hash,
+    folderId: folderId ?? null,
+  });
   saveDocs();
   return { docId, chunkCount: chunks.length };
 }
@@ -357,7 +369,7 @@ function sseErr(send, e) {
 
 // ---------- 1) 문서 색인 (파일) ----------
 app.post("/api/index", async (req, res) => {
-  const { file, pdf, filename, pageFrom, pageTo } = req.body;
+  const { file, pdf, filename, pageFrom, pageTo, folderId } = req.body;
   const fileData = file || pdf;
   if (!fileData) return res.status(400).json({ error: "파일 데이터가 없습니다." });
 
@@ -421,7 +433,7 @@ app.post("/api/index", async (req, res) => {
         return res.end();
       }
     }
-    const { docId, chunkCount } = await indexTextSSE(text, docName, hash, send);
+    const { docId, chunkCount } = await indexTextSSE(text, docName, hash, send, folderId ?? null);
     send({ type: "done", docId, name: docName, chunkCount });
     res.end();
   } catch (e) {
@@ -432,7 +444,7 @@ app.post("/api/index", async (req, res) => {
 
 // ---------- 2) URL 색인 ----------
 app.post("/api/index-url", async (req, res) => {
-  const { url } = req.body;
+  const { url, folderId: urlFolderId } = req.body;
   if (!url?.trim()) return res.status(400).json({ error: "URL이 없습니다." });
 
   let html;
@@ -477,7 +489,7 @@ app.post("/api/index-url", async (req, res) => {
   const send = (obj) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
 
   try {
-    const { docId, chunkCount } = await indexTextSSE(text, title, hash, send);
+    const { docId, chunkCount } = await indexTextSSE(text, title, hash, send, urlFolderId ?? null);
     send({ type: "done", docId, name: title, chunkCount });
     res.end();
   } catch (e) {
@@ -488,17 +500,53 @@ app.post("/api/index-url", async (req, res) => {
 
 // ---------- 3) 자료 목록 / 이름 변경 / 삭제 ----------
 app.get("/api/docs", (_req, res) => {
-  res.json({ docs: docs.slice().sort((a, b) => b.addedAt - a.addedAt) });
+  res.json({
+    docs: docs.slice().sort((a, b) => b.addedAt - a.addedAt),
+    folders: folders.slice().sort((a, b) => a.name.localeCompare(b.name)),
+  });
 });
 
 app.patch("/api/docs/:id", (req, res) => {
-  const name = req.body.name?.trim();
-  if (!name) return res.status(400).json({ error: "이름이 없습니다." });
   const doc = docs.find((d) => d.id === req.params.id);
   if (!doc) return res.status(404).json({ error: "문서를 찾을 수 없습니다." });
-  doc.name = name;
+  if (req.body.name !== undefined) {
+    const name = req.body.name.trim();
+    if (!name) return res.status(400).json({ error: "이름이 없습니다." });
+    doc.name = name;
+  }
+  if ("folderId" in req.body) doc.folderId = req.body.folderId; // null = 루트
   saveDocs();
-  res.json({ ok: true, name });
+  res.json({ ok: true });
+});
+
+// ---------- 폴더 ----------
+app.post("/api/folders", (req, res) => {
+  const name = req.body.name?.trim();
+  if (!name) return res.status(400).json({ error: "폴더 이름이 없습니다." });
+  const id = crypto.randomUUID();
+  folders.push({ id, name, createdAt: Date.now() });
+  saveDocs();
+  res.json({ id, name });
+});
+
+app.patch("/api/folders/:id", (req, res) => {
+  const folder = folders.find((f) => f.id === req.params.id);
+  if (!folder) return res.status(404).json({ error: "폴더를 찾을 수 없습니다." });
+  const name = req.body.name?.trim();
+  if (!name) return res.status(400).json({ error: "이름이 없습니다." });
+  folder.name = name;
+  saveDocs();
+  res.json({ ok: true });
+});
+
+app.delete("/api/folders/:id", (req, res) => {
+  const id = req.params.id;
+  folders = folders.filter((f) => f.id !== id);
+  docs.forEach((d) => {
+    if (d.folderId === id) d.folderId = null;
+  });
+  saveDocs();
+  res.json({ ok: true });
 });
 
 app.delete("/api/docs/:id", async (req, res) => {

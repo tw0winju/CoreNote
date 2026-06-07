@@ -1,9 +1,415 @@
 import { useRef, useState } from "react";
 import { C, sans, serif } from "../theme";
 
+function FolderRow({ folder, docs, docsHook }) {
+  const {
+    selectedDocs,
+    toggleFolder,
+    removeFolder,
+    renameFolderId,
+    renameFolderName,
+    setRenameFolderName,
+    startRenameFolder,
+    cancelRenameFolder,
+    commitRenameFolder,
+    renameId,
+    renameName,
+    setRenameName,
+    startRename,
+    cancelRename,
+    commitRename,
+    removeDoc,
+    toggleDoc,
+    moveDoc,
+    folders,
+  } = docsHook;
+
+  const [open, setOpen] = useState(true);
+  const folderDocs = docs.filter((d) => d.folderId === folder.id);
+  const selectedCount = folderDocs.filter((d) => selectedDocs.has(d.id)).length;
+  const allSelected = folderDocs.length > 0 && selectedCount === folderDocs.length;
+  const someSelected = selectedCount > 0 && !allSelected;
+
+  return (
+    <div>
+      {/* 폴더 헤더 */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          padding: "7px 10px",
+          borderRadius: 9,
+          background: C.paper2,
+          border: `1px solid ${C.line}`,
+          marginBottom: 4,
+        }}
+      >
+        {/* 폴더 전체 선택 버튼 */}
+        <button
+          onClick={() => toggleFolder(folder.id)}
+          title={allSelected ? "폴더 선택 해제" : "폴더 전체 선택"}
+          style={{
+            width: 16,
+            height: 16,
+            flexShrink: 0,
+            padding: 0,
+            cursor: "pointer",
+            border: `2px solid ${allSelected || someSelected ? C.accent : C.line}`,
+            borderRadius: "50%",
+            background: allSelected ? C.accent : someSelected ? C.accentSoft : "transparent",
+            position: "relative",
+          }}
+        >
+          {someSelected && (
+            <span
+              style={{
+                position: "absolute",
+                inset: 0,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 9,
+                color: C.accent,
+                lineHeight: 1,
+              }}
+            >
+              —
+            </span>
+          )}
+        </button>
+
+        {/* 폴더 아이콘 + 열기/닫기 */}
+        <button
+          onClick={() => setOpen((v) => !v)}
+          style={{
+            border: "none",
+            background: "transparent",
+            cursor: "pointer",
+            padding: 0,
+            fontSize: 14,
+            lineHeight: 1,
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
+            flex: 1,
+            minWidth: 0,
+            fontFamily: sans,
+          }}
+        >
+          <span>{open ? "📂" : "📁"}</span>
+          {renameFolderId === folder.id ? (
+            <input
+              autoFocus
+              value={renameFolderName}
+              onChange={(e) => setRenameFolderName(e.target.value)}
+              onBlur={commitRenameFolder}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitRenameFolder();
+                if (e.key === "Escape") cancelRenameFolder();
+              }}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                flex: 1,
+                padding: "1px 5px",
+                border: `1px solid ${C.accent}`,
+                borderRadius: 4,
+                fontFamily: sans,
+                fontSize: 13,
+                background: C.card,
+              }}
+            />
+          ) : (
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                color: C.ink,
+              }}
+            >
+              {folder.name}
+            </span>
+          )}
+          <span style={{ fontSize: 11, color: C.inkSoft, flexShrink: 0 }}>
+            {folderDocs.length}개
+          </span>
+        </button>
+
+        {/* 폴더 이름 변경 */}
+        {renameFolderId !== folder.id && (
+          <button
+            onClick={() => startRenameFolder(folder)}
+            title="이름 변경"
+            style={{
+              border: "none",
+              background: "transparent",
+              color: C.inkSoft,
+              fontSize: 12,
+              cursor: "pointer",
+              padding: "0 2px",
+              opacity: 0.6,
+            }}
+          >
+            ✎
+          </button>
+        )}
+
+        {/* 폴더 삭제 */}
+        <button
+          onClick={() => removeFolder(folder.id)}
+          title="폴더 삭제 (파일은 루트로 이동)"
+          style={{
+            border: "none",
+            background: "transparent",
+            color: C.inkSoft,
+            fontSize: 16,
+            lineHeight: 1,
+            padding: "0 2px",
+            cursor: "pointer",
+          }}
+        >
+          ×
+        </button>
+      </div>
+
+      {/* 폴더 내 문서 */}
+      {open && (
+        <div style={{ paddingLeft: 14, display: "grid", gap: 5, marginBottom: 4 }}>
+          {folderDocs.length === 0 && (
+            <div style={{ fontSize: 12, color: C.inkSoft, padding: "4px 6px" }}>비어 있음</div>
+          )}
+          {folderDocs.map((d) => (
+            <DocRow
+              key={d.id}
+              doc={d}
+              docsHook={docsHook}
+              folders={folders}
+              renameId={renameId}
+              renameName={renameName}
+              setRenameName={setRenameName}
+              startRename={startRename}
+              cancelRename={cancelRename}
+              commitRename={commitRename}
+              selectedDocs={selectedDocs}
+              toggleDoc={toggleDoc}
+              removeDoc={removeDoc}
+              moveDoc={moveDoc}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DocRow({
+  doc,
+  folders,
+  renameId,
+  renameName,
+  setRenameName,
+  startRename,
+  cancelRename,
+  commitRename,
+  selectedDocs,
+  toggleDoc,
+  removeDoc,
+  moveDoc,
+}) {
+  const [showMoveMenu, setShowMoveMenu] = useState(false);
+
+  return (
+    <div
+      style={{
+        background: C.card,
+        borderRadius: 9,
+        padding: "8px 10px",
+        border: `1px solid ${selectedDocs.has(doc.id) ? C.accent : C.line}`,
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+      }}
+    >
+      {/* 검색 범위 토글 */}
+      <button
+        onClick={() => toggleDoc(doc.id)}
+        title={selectedDocs.has(doc.id) ? "검색 범위 해제" : "이 문서만 검색"}
+        style={{
+          width: 14,
+          height: 14,
+          flexShrink: 0,
+          padding: 0,
+          cursor: "pointer",
+          border: `2px solid ${selectedDocs.has(doc.id) ? C.accent : C.line}`,
+          borderRadius: "50%",
+          background: selectedDocs.has(doc.id) ? C.accent : "transparent",
+        }}
+      />
+
+      <div style={{ minWidth: 0, flex: 1 }}>
+        {renameId === doc.id ? (
+          <input
+            autoFocus
+            value={renameName}
+            onChange={(e) => setRenameName(e.target.value)}
+            onBlur={commitRename}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitRename();
+              if (e.key === "Escape") cancelRename();
+            }}
+            style={{
+              width: "100%",
+              padding: "2px 5px",
+              border: `1px solid ${C.accent}`,
+              borderRadius: 4,
+              fontFamily: sans,
+              fontSize: 13,
+              background: C.card,
+            }}
+          />
+        ) : (
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <span
+              style={{
+                fontSize: 13,
+                fontWeight: 500,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {doc.name}
+            </span>
+            <button
+              onClick={() => startRename(doc)}
+              title="이름 변경"
+              style={{
+                border: "none",
+                background: "transparent",
+                color: C.inkSoft,
+                fontSize: 11,
+                cursor: "pointer",
+                padding: "0 1px",
+                opacity: 0.5,
+                flexShrink: 0,
+              }}
+            >
+              ✎
+            </button>
+          </div>
+        )}
+        <div style={{ fontSize: 11, color: C.inkSoft }}>{doc.chunkCount}개 조각</div>
+      </div>
+
+      {/* 폴더 이동 버튼 */}
+      <div style={{ position: "relative", flexShrink: 0 }}>
+        <button
+          onClick={() => setShowMoveMenu((v) => !v)}
+          title="폴더 이동"
+          style={{
+            border: "none",
+            background: "transparent",
+            fontSize: 13,
+            cursor: "pointer",
+            padding: "0 2px",
+            color: C.inkSoft,
+            opacity: 0.7,
+          }}
+        >
+          📂
+        </button>
+        {showMoveMenu && (
+          <div
+            style={{
+              position: "absolute",
+              right: 0,
+              top: "100%",
+              zIndex: 50,
+              background: C.card,
+              border: `1px solid ${C.line}`,
+              borderRadius: 8,
+              boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+              minWidth: 130,
+              padding: 4,
+            }}
+          >
+            <button
+              onClick={() => {
+                moveDoc(doc.id, null);
+                setShowMoveMenu(false);
+              }}
+              style={{
+                display: "block",
+                width: "100%",
+                textAlign: "left",
+                padding: "6px 10px",
+                fontSize: 13,
+                border: "none",
+                background: doc.folderId === null ? C.accentSoft : "transparent",
+                cursor: "pointer",
+                borderRadius: 5,
+                fontFamily: sans,
+                color: C.ink,
+              }}
+            >
+              📄 루트
+            </button>
+            {folders.map((f) => (
+              <button
+                key={f.id}
+                onClick={() => {
+                  moveDoc(doc.id, f.id);
+                  setShowMoveMenu(false);
+                }}
+                style={{
+                  display: "block",
+                  width: "100%",
+                  textAlign: "left",
+                  padding: "6px 10px",
+                  fontSize: 13,
+                  border: "none",
+                  background: doc.folderId === f.id ? C.accentSoft : "transparent",
+                  cursor: "pointer",
+                  borderRadius: 5,
+                  fontFamily: sans,
+                  color: C.ink,
+                }}
+              >
+                📁 {f.name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* 삭제 */}
+      <button
+        onClick={() => removeDoc(doc.id)}
+        title="삭제"
+        style={{
+          border: "none",
+          background: "transparent",
+          color: C.inkSoft,
+          fontSize: 16,
+          lineHeight: 1,
+          padding: "0 2px",
+          flexShrink: 0,
+          cursor: "pointer",
+        }}
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
 export default function Library({ docs: docsHook, indexing: indexingHook }) {
   const {
     docs,
+    folders,
     selectedDocs,
     renameId,
     renameName,
@@ -13,6 +419,8 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
     startRename,
     cancelRename,
     commitRename,
+    moveDoc,
+    createFolder,
   } = docsHook;
 
   const {
@@ -29,10 +437,24 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
     setPageFrom,
     pageTo,
     setPageTo,
+    targetFolderId,
+    setTargetFolderId,
   } = indexingHook;
 
   const inputRef = useRef(null);
   const [dragging, setDragging] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [showNewFolder, setShowNewFolder] = useState(false);
+
+  const rootDocs = docs.filter((d) => !d.folderId);
+
+  const handleCreateFolder = async () => {
+    const name = newFolderName.trim();
+    if (!name) return;
+    await createFolder(name);
+    setNewFolderName("");
+    setShowNewFolder(false);
+  };
 
   return (
     <section style={{ flex: "1 1 300px", minWidth: 280 }}>
@@ -102,7 +524,7 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
               padding: "20px 16px",
               textAlign: "center",
               cursor: indexing ? "default" : "pointer",
-              marginBottom: 14,
+              marginBottom: 10,
               transition: "all .2s",
               background: dragging ? C.accentSoft : "transparent",
             }}
@@ -145,17 +567,42 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
               onChange={(e) => uploadFile(e.target.files[0])}
             />
           </div>
-          {/* PDF 페이지 범위 (선택) */}
+
+          {/* 업로드 옵션: 폴더 선택 + PDF 페이지 범위 */}
           <div
             style={{
               display: "flex",
+              flexWrap: "wrap",
               alignItems: "center",
-              gap: 6,
+              gap: 8,
               marginBottom: 14,
               fontSize: 13,
               color: C.inkSoft,
             }}
           >
+            <select
+              value={targetFolderId ?? ""}
+              onChange={(e) => setTargetFolderId(e.target.value || null)}
+              disabled={indexing}
+              style={{
+                padding: "4px 7px",
+                borderRadius: 7,
+                border: `1px solid ${C.line}`,
+                fontFamily: sans,
+                fontSize: 13,
+                background: C.card,
+                color: C.ink,
+                cursor: "pointer",
+              }}
+            >
+              <option value="">📄 루트</option>
+              {folders.map((f) => (
+                <option key={f.id} value={f.id}>
+                  📁 {f.name}
+                </option>
+              ))}
+            </select>
+            <span style={{ color: C.line }}>|</span>
             <span>PDF 페이지</span>
             <input
               type="number"
@@ -165,8 +612,8 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
               placeholder="시작"
               disabled={indexing}
               style={{
-                width: 58,
-                padding: "4px 8px",
+                width: 55,
+                padding: "4px 7px",
                 borderRadius: 7,
                 border: `1px solid ${C.line}`,
                 fontFamily: sans,
@@ -184,8 +631,8 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
               placeholder="끝"
               disabled={indexing}
               style={{
-                width: 58,
-                padding: "4px 8px",
+                width: 55,
+                padding: "4px 7px",
                 borderRadius: 7,
                 border: `1px solid ${C.line}`,
                 fontFamily: sans,
@@ -194,7 +641,6 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
                 outline: "none",
               }}
             />
-            <span style={{ fontSize: 12 }}>선택</span>
           </div>
         </>
       ) : (
@@ -237,31 +683,55 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
               {indexing ? "…" : "추가"}
             </button>
           </div>
-          {indexing && (
-            <div
+          {/* URL 업로드 폴더 선택 */}
+          <div
+            style={{
+              marginTop: 8,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              fontSize: 13,
+              color: C.inkSoft,
+            }}
+          >
+            <select
+              value={targetFolderId ?? ""}
+              onChange={(e) => setTargetFolderId(e.target.value || null)}
+              disabled={indexing}
               style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                color: C.inkSoft,
+                padding: "4px 7px",
+                borderRadius: 7,
+                border: `1px solid ${C.line}`,
+                fontFamily: sans,
                 fontSize: 13,
-                marginTop: 8,
+                background: C.card,
+                color: C.ink,
               }}
             >
-              <span
-                className="spin"
-                style={{
-                  width: 14,
-                  height: 14,
-                  border: `2px solid ${C.accentSoft}`,
-                  borderTopColor: C.accent,
-                  borderRadius: "50%",
-                  display: "inline-block",
-                }}
-              />
-              {spinnerMsg}
-            </div>
-          )}
+              <option value="">📄 루트</option>
+              {folders.map((f) => (
+                <option key={f.id} value={f.id}>
+                  📁 {f.name}
+                </option>
+              ))}
+            </select>
+            {indexing && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span
+                  className="spin"
+                  style={{
+                    width: 14,
+                    height: 14,
+                    border: `2px solid ${C.accentSoft}`,
+                    borderTopColor: C.accent,
+                    borderRadius: "50%",
+                    display: "inline-block",
+                  }}
+                />
+                {spinnerMsg}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -269,114 +739,116 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
         <div style={{ color: C.accent, fontSize: 13, marginBottom: 12 }}>{indexError}</div>
       )}
 
-      {/* 문서 목록 */}
-      <div style={{ display: "grid", gap: 8 }}>
+      {/* 새 폴더 만들기 */}
+      <div style={{ marginBottom: 10 }}>
+        {showNewFolder ? (
+          <div style={{ display: "flex", gap: 6 }}>
+            <input
+              autoFocus
+              value={newFolderName}
+              onChange={(e) => setNewFolderName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleCreateFolder();
+                if (e.key === "Escape") {
+                  setShowNewFolder(false);
+                  setNewFolderName("");
+                }
+              }}
+              placeholder="폴더 이름"
+              style={{
+                flex: 1,
+                padding: "5px 9px",
+                borderRadius: 8,
+                border: `1px solid ${C.accent}`,
+                fontFamily: sans,
+                fontSize: 13,
+                background: C.card,
+                outline: "none",
+              }}
+            />
+            <button
+              onClick={handleCreateFolder}
+              style={{
+                border: "none",
+                background: C.ink,
+                color: C.paper,
+                padding: "5px 12px",
+                borderRadius: 8,
+                fontSize: 13,
+                cursor: "pointer",
+                fontFamily: sans,
+              }}
+            >
+              만들기
+            </button>
+            <button
+              onClick={() => {
+                setShowNewFolder(false);
+                setNewFolderName("");
+              }}
+              style={{
+                border: `1px solid ${C.line}`,
+                background: "transparent",
+                padding: "5px 10px",
+                borderRadius: 8,
+                fontSize: 13,
+                cursor: "pointer",
+                fontFamily: sans,
+              }}
+            >
+              취소
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowNewFolder(true)}
+            style={{
+              border: `1px dashed ${C.line}`,
+              background: "transparent",
+              color: C.inkSoft,
+              padding: "5px 12px",
+              borderRadius: 8,
+              fontSize: 13,
+              cursor: "pointer",
+              fontFamily: sans,
+              width: "100%",
+            }}
+          >
+            + 새 폴더
+          </button>
+        )}
+      </div>
+
+      {/* 자료 목록 */}
+      <div style={{ display: "grid", gap: 6 }}>
         {docs.length === 0 && !indexing && (
           <div style={{ color: C.inkSoft, fontSize: 13.5, padding: "8px 2px" }}>
             아직 자료가 없어요. PDF를 추가해 시작하세요.
           </div>
         )}
-        {docs.map((d) => (
-          <div
+
+        {/* 폴더 */}
+        {folders.map((folder) => (
+          <FolderRow key={folder.id} folder={folder} docs={docs} docsHook={docsHook} />
+        ))}
+
+        {/* 루트 문서 */}
+        {rootDocs.map((d) => (
+          <DocRow
             key={d.id}
-            style={{
-              background: C.card,
-              borderRadius: 10,
-              padding: "11px 13px",
-              border: `1px solid ${selectedDocs.has(d.id) ? C.accent : C.line}`,
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-            }}
-          >
-            {/* 문서 범위 선택 토글 */}
-            <button
-              onClick={() => toggleDoc(d.id)}
-              title={selectedDocs.has(d.id) ? "검색 범위 해제" : "이 문서만 검색"}
-              style={{
-                width: 16,
-                height: 16,
-                flexShrink: 0,
-                padding: 0,
-                cursor: "pointer",
-                border: `2px solid ${selectedDocs.has(d.id) ? C.accent : C.line}`,
-                borderRadius: "50%",
-                background: selectedDocs.has(d.id) ? C.accent : "transparent",
-              }}
-            />
-
-            <div style={{ minWidth: 0, flex: 1 }}>
-              {/* 인라인 이름 변경 */}
-              {renameId === d.id ? (
-                <input
-                  autoFocus
-                  value={renameName}
-                  onChange={(e) => setRenameName(e.target.value)}
-                  onBlur={commitRename}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") commitRename();
-                    if (e.key === "Escape") cancelRename();
-                  }}
-                  style={{
-                    width: "100%",
-                    padding: "2px 6px",
-                    border: `1px solid ${C.accent}`,
-                    borderRadius: 5,
-                    fontFamily: sans,
-                    fontSize: 14,
-                    background: C.card,
-                  }}
-                />
-              ) : (
-                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                  <span
-                    style={{
-                      fontSize: 14,
-                      fontWeight: 500,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {d.name}
-                  </span>
-                  <button
-                    onClick={() => startRename(d)}
-                    title="이름 변경"
-                    style={{
-                      border: "none",
-                      background: "transparent",
-                      color: C.inkSoft,
-                      fontSize: 12,
-                      cursor: "pointer",
-                      padding: "0 2px",
-                      opacity: 0.5,
-                      lineHeight: 1,
-                      flexShrink: 0,
-                    }}
-                  >
-                    ✎
-                  </button>
-                </div>
-              )}
-              <div style={{ fontSize: 12, color: C.inkSoft }}>{d.chunkCount}개 조각</div>
-            </div>
-
-            <button
-              onClick={() => removeDoc(d.id)}
-              title="삭제"
-              style={{
-                border: "none",
-                background: "transparent",
-                color: C.inkSoft,
-                fontSize: 18,
-                lineHeight: 1,
-                padding: 4,
-              }}
-            >
-              ×
-            </button>
-          </div>
+            doc={d}
+            folders={folders}
+            renameId={renameId}
+            renameName={renameName}
+            setRenameName={setRenameName}
+            startRename={startRename}
+            cancelRename={cancelRename}
+            commitRename={commitRename}
+            selectedDocs={selectedDocs}
+            toggleDoc={toggleDoc}
+            removeDoc={removeDoc}
+            moveDoc={moveDoc}
+          />
         ))}
       </div>
     </section>

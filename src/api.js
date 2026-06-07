@@ -9,9 +9,30 @@ export const patchDocName = (id, name) =>
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name }),
   });
+export const patchDocFolder = (id, folderId) =>
+  fetch(`/api/docs/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ folderId }),
+  });
+
+// ── 폴더 ──────────────────────────────────────────────────────────────────────
+export const postFolder = (name) =>
+  fetch("/api/folders", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  }).then((r) => r.json());
+export const patchFolderName = (id, name) =>
+  fetch(`/api/folders/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+export const deleteFolder = (id) => fetch(`/api/folders/${id}`, { method: "DELETE" });
 
 // ── 색인 ──────────────────────────────────────────────────────────────────────
-export const postIndexFile = (base64, filename, pageFrom = null, pageTo = null) =>
+export const postIndexFile = (base64, filename, pageFrom = null, pageTo = null, folderId = null) =>
   fetch("/api/index", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -20,14 +41,15 @@ export const postIndexFile = (base64, filename, pageFrom = null, pageTo = null) 
       filename,
       ...(pageFrom != null && { pageFrom }),
       ...(pageTo != null && { pageTo }),
+      ...(folderId != null && { folderId }),
     }),
   });
 
-export const postIndexUrl = (url) =>
+export const postIndexUrl = (url, folderId = null) =>
   fetch("/api/index-url", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url }),
+    body: JSON.stringify({ url, ...(folderId != null && { folderId }) }),
   });
 
 // ── 질문 ──────────────────────────────────────────────────────────────────────

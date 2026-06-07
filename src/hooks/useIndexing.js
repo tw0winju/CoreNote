@@ -10,6 +10,7 @@ export default function useIndexing(onIndexed) {
   const [urlInput, setUrlInput] = useState("");
   const [pageFrom, setPageFrom] = useState("");
   const [pageTo, setPageTo] = useState("");
+  const [targetFolderId, setTargetFolderId] = useState(null);
 
   const begin = () => {
     setIndexing(true);
@@ -59,7 +60,7 @@ export default function useIndexing(onIndexed) {
     const to = pageTo ? Number(pageTo) : null;
     reader.onload = () =>
       run(
-        () => postIndexFile(String(reader.result).split(",")[1], f.name, from, to),
+        () => postIndexFile(String(reader.result).split(",")[1], f.name, from, to, targetFolderId),
         () => {
           setPageFrom("");
           setPageTo("");
@@ -73,7 +74,7 @@ export default function useIndexing(onIndexed) {
     const url = urlInput.trim();
     if (!url) return;
     run(
-      () => postIndexUrl(url),
+      () => postIndexUrl(url, targetFolderId),
       () => setUrlInput(""),
     );
   };
@@ -98,5 +99,7 @@ export default function useIndexing(onIndexed) {
     setPageFrom,
     pageTo,
     setPageTo,
+    targetFolderId,
+    setTargetFolderId,
   };
 }
