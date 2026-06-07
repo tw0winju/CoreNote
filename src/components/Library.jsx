@@ -242,20 +242,21 @@ function DocRow({
         e.dataTransfer.setData("docId", doc.id);
         e.dataTransfer.effectAllowed = "move";
       }}
+      onClick={() => toggleDoc(doc.id)}
       style={{
-        background: C.card,
+        background: selectedDocs.has(doc.id) ? C.accentSoft : C.card,
         borderRadius: 9,
         padding: "8px 10px",
         border: `1px solid ${selectedDocs.has(doc.id) ? C.accent : C.line}`,
         display: "flex",
         alignItems: "center",
         gap: 8,
-        cursor: "grab",
+        cursor: "pointer",
       }}
     >
       {/* 검색 범위 토글 */}
       <button
-        onClick={() => toggleDoc(doc.id)}
+        onClick={(e) => e.stopPropagation()}
         title={selectedDocs.has(doc.id) ? "검색 범위 해제" : "이 문서만 검색"}
         style={{
           width: 14,
@@ -304,7 +305,7 @@ function DocRow({
               {doc.name}
             </span>
             <button
-              onClick={() => startRename(doc)}
+              onClick={(e) => { e.stopPropagation(); startRename(doc); }}
               title="이름 변경"
               style={{
                 border: "none",
@@ -327,7 +328,7 @@ function DocRow({
       {/* 폴더 이동 버튼 */}
       <div style={{ position: "relative", flexShrink: 0 }}>
         <button
-          onClick={() => setShowMoveMenu((v) => !v)}
+          onClick={(e) => { e.stopPropagation(); setShowMoveMenu((v) => !v); }}
           title="폴더 이동"
           style={{
             border: "none",
@@ -357,7 +358,8 @@ function DocRow({
             }}
           >
             <button
-              onClick={() => {
+              onClick={(e) => {
+                e.stopPropagation();
                 moveDoc(doc.id, null);
                 setShowMoveMenu(false);
               }}
@@ -380,7 +382,8 @@ function DocRow({
             {folders.map((f) => (
               <button
                 key={f.id}
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   moveDoc(doc.id, f.id);
                   setShowMoveMenu(false);
                 }}
@@ -407,7 +410,7 @@ function DocRow({
 
       {/* 삭제 */}
       <button
-        onClick={() => removeDoc(doc.id)}
+        onClick={(e) => { e.stopPropagation(); removeDoc(doc.id); }}
         title="삭제"
         style={{
           border: "none",

@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { C, sans } from "../theme";
 
 // 출처 [N] 인용 번호 클릭 가능하게 변환
@@ -176,7 +175,7 @@ function AnswerBubble({ text, id, copiedKey, onCopy, streaming, onCitationClick 
         lineHeight: 1.75,
       }}
     >
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      <ReactMarkdown components={components}>
         {text}
       </ReactMarkdown>
       <CopyButton text={text} id={id} copiedKey={copiedKey} onCopy={onCopy} />
@@ -561,7 +560,8 @@ export default function Chat({ chat, docs: docsHook }) {
             setQuestion(e.target.value);
           }}
           onKeyDown={(e) => {
-            if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+            if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+              e.preventDefault();
               ask(selectedDocs);
               return;
             }
@@ -580,7 +580,7 @@ export default function Chat({ chat, docs: docsHook }) {
               navigateHistory(1);
             }
           }}
-          placeholder="내 자료에 대해 물어보세요. (Ctrl+Enter로 질문 / ↑↓ 이전 질문)"
+          placeholder="내 자료에 대해 물어보세요. (Enter로 질문 / Shift+Enter 줄바꿈 / ↑↓ 이전 질문)"
           rows={3}
           style={{
             width: "100%",

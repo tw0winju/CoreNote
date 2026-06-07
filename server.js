@@ -90,8 +90,12 @@ async function getTable() {
   return chunksTable;
 }
 async function addToTable(records) {
-  if (!chunksTable) chunksTable = await db.createTable("chunks", records);
-  else await chunksTable.add(records);
+  await getTable(); // 기존 테이블이 있으면 chunksTable 세팅
+  if (!chunksTable) {
+    chunksTable = await db.createTable("chunks", records);
+  } else {
+    await chunksTable.add(records);
+  }
 }
 
 // ---------- store.json → LanceDB 마이그레이션 ----------
@@ -392,6 +396,8 @@ async function indexTextSSE(text, name, hash, send, folderId = null) {
   for (let i = 0; i < chunks.length; i += BATCH) {
     const batch = chunks.slice(i, i + BATCH);
     const vecs = await embed(batch);
+    if (!vecs || vecs.length < batch.length)
+      throw new Error(`임베딩 결과 부족: 요청 ${batch.length}개, 수신 ${vecs?.length ?? 0}개`);
     batch.forEach((t, j) =>
       records.push({
         id: crypto.randomUUID(),
@@ -419,6 +425,7 @@ async function indexTextSSE(text, name, hash, send, folderId = null) {
 
 // ---------- SSE 오류 헬퍼 ----------
 function sseErr(send, e) {
+  console.error("[sseErr]", e);
   const m = String(e.message || "");
   if (m === "OLLAMA_DOWN" || m === "OLLAMA_FETCH")
     send({ type: "error", error: "Ollama 서버에 연결할 수 없습니다. 실행 중인지 확인하세요." });
@@ -427,7 +434,9 @@ function sseErr(send, e) {
       type: "error",
       error: `임베딩 모델(${settings.embedModel})이 없습니다. 'ollama pull ${settings.embedModel}' 을 실행하세요.`,
     });
-  else send({ type: "error", error: "처리 중 오류가 발생했습니다." });
+  else if (m.startsWith("OLLAMA_HTTP_"))
+    send({ type: "error", error: `Ollama 오류 (${m.slice(12)}) — 서버 로그를 확인하세요.` });
+  else send({ type: "error", error: `처리 중 오류가 발생했습니다: ${m}` });
 }
 
 // ---------- 1) 문서 색인 (파일) ----------
@@ -492,6 +501,9 @@ app.post("/api/index", async (req, res) => {
         send({ type: "error", error: "OCR 처리 중 오류가 발생했습니다." });
         return res.end();
       }
+      // 제어 문자·null 바이트 제거 (임베딩 오류 방지)
+      // eslint-disable-next-line no-control-regex
+      text = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, " ").replace(/\s+/g, " ").trim();
       if (text.length < 30) {
         send({
           type: "error",
@@ -823,7 +835,9 @@ app.post("/api/ask", async (req, res) => {
       } catch {}
     }
 
-    const qvec = (await embed(queryText))[0];
+    const embedResult = await embed(queryText);
+    const qvec = embedResult[0];
+    if (!qvec) throw new Error("질문 임베딩 결과가 없습니다. 임베딩 모델을 확인하세요.");
 
     let search = table.vectorSearch(qvec).limit(settings.topK * 4);
     if (docIds?.length > 0)

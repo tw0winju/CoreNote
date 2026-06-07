@@ -1,6 +1,5 @@
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { C, sans, serif } from "../theme";
 import { postQuiz, postSummary } from "../api";
 
@@ -124,7 +123,7 @@ function FavoritesPanel({ favorites, onRemove }) {
                   overflowY: "auto",
                 }}
               >
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{f.a}</ReactMarkdown>
+                <ReactMarkdown >{f.a}</ReactMarkdown>
               </div>
             )}
           </div>
@@ -497,7 +496,7 @@ function SummaryPanel({ docs }) {
               요약 생성 중…
             </div>
           ) : (
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{summaries[selectedDocId] || ""}</ReactMarkdown>
+            <ReactMarkdown >{summaries[selectedDocId] || ""}</ReactMarkdown>
           )}
         </div>
       )}
