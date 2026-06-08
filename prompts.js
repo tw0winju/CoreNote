@@ -27,9 +27,28 @@ Q: ${q}
 A: ${a.slice(0, 400)}`;
 
 // ── 퀴즈 생성 ─────────────────────────────────────────────────────────────────
-export const quizPrompt = (count, text) =>
-  `다음 내용을 바탕으로 학습 퀴즈 ${count}개를 만들어줘.
-JSON 배열 형식으로만 출력해. 각 항목: {"q": "질문", "a": "정답", "hint": "힌트(한 줄)"}
+export const quizMcPrompt = (count, text) =>
+  `다음 내용을 바탕으로 4지선다 퀴즈 ${count}개를 만들어줘.
+JSON 배열로만 출력해. 각 항목 형식:
+{"q": "질문", "options": ["A. 선택지1", "B. 선택지2", "C. 선택지3", "D. 선택지4"], "a": "A", "hint": "힌트 한 줄"}
+정답(a)은 반드시 "A", "B", "C", "D" 중 하나. <think> 없이 JSON만 출력.
+
+내용:
+${text}`;
+
+export const quizTfPrompt = (count, text) =>
+  `다음 내용을 바탕으로 O/X 퀴즈 ${count}개를 만들어줘.
+JSON 배열로만 출력해. 각 항목 형식:
+{"q": "참이거나 거짓인 진술 문장", "a": "O", "hint": "힌트 한 줄"}
+정답(a)은 반드시 "O" 또는 "X". <think> 없이 JSON만 출력.
+
+내용:
+${text}`;
+
+export const quizSaPrompt = (count, text) =>
+  `다음 내용을 바탕으로 주관식 퀴즈 ${count}개를 만들어줘.
+JSON 배열로만 출력해. 각 항목 형식:
+{"q": "질문", "a": "간결한 정답(1~2문장)", "hint": "힌트 한 줄"}
 <think> 없이 JSON만 출력.
 
 내용:

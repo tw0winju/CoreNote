@@ -12,7 +12,9 @@ import {
   HYDE_SYSTEM_PROMPT,
   rerankPrompt,
   memoryExtractPrompt,
-  quizPrompt,
+  quizMcPrompt,
+  quizTfPrompt,
+  quizSaPrompt,
   summaryPrompt,
   batchSummaryPrompt,
   ragPrompt,
@@ -818,7 +820,7 @@ app.post("/api/memories/extract", async (req, res) => {
 
 // ---------- 퀴즈 생성 ----------
 app.post("/api/quiz", async (req, res) => {
-  const { docId, count = 5 } = req.body;
+  const { docId, count = 10, type = "mc" } = req.body;
   if (!docId) return res.status(400).json({ error: "docId가 필요합니다." });
   try {
     const table = await getTable();
@@ -826,18 +828,25 @@ app.post("/api/quiz", async (req, res) => {
     const chunks = await table.query().where(`docId = '${docId}'`).toArray();
     if (!chunks.length) return res.status(404).json({ error: "문서를 찾을 수 없어요." });
     chunks.sort((a, b) => a.index - b.index);
-    const step = Math.max(1, Math.floor(chunks.length / 8));
-    const sampled = chunks.filter((_, i) => i % step === 0).slice(0, 8);
+    const step = Math.max(1, Math.floor(chunks.length / 12));
+    const sampled = chunks.filter((_, i) => i % step === 0).slice(0, 12);
     const text = sampled
       .map((c) => c.text)
       .join("\n\n")
-      .slice(0, 3000);
-    const prompt = quizPrompt(count, text);
-    const cleaned = await ollamaGenerate([{ role: "user", content: prompt }], { temperature: 0.3 });
+      .slice(0, 4500);
+    const prompt =
+      type === "tf" ? quizTfPrompt(count, text) :
+      type === "sa" ? quizSaPrompt(count, text) :
+      quizMcPrompt(count, text);
+    const cleaned = await ollamaGenerate([{ role: "user", content: prompt }], { temperature: 0.4 });
     const match = cleaned.match(/\[[\s\S]*\]/);
     if (!match) return res.status(502).json({ error: "퀴즈 파싱 실패" });
     const questions = JSON.parse(match[0])
-      .filter((q) => q.q && q.a)
+      .filter((q) => {
+        if (!q.q || !q.a) return false;
+        if (type === "mc" && !q.options?.length) return false;
+        return true;
+      })
       .slice(0, count);
     res.json({ questions });
   } catch (e) {

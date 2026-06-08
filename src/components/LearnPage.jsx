@@ -1,7 +1,7 @@
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { C, sans, serif } from "../theme";
+import { C, sans } from "../theme";
 import { postQuiz, postSummary, readSSE, fetchDocText } from "../api";
 
 // ── 공용 디렉터리 트리 ────────────────────────────────────────────────────────
@@ -239,29 +239,320 @@ function FavoritesPanel({ favorites, onRemove }) {
 
 // ── 퀴즈 ─────────────────────────────────────────────────────────────────────
 
+const QUIZ_TYPES = [
+  { id: "mc", label: "4지선다" },
+  { id: "tf", label: "O / X" },
+  { id: "sa", label: "주관식" },
+];
+
+const GREEN = "rgba(34,197,94,0.12)";
+const GREEN_BORDER = "rgba(34,197,94,0.45)";
+const GREEN_TEXT = "#16a34a";
+const RED = "rgba(239,68,68,0.08)";
+const RED_BORDER = "rgba(239,68,68,0.4)";
+
+function QuestionCard({ idx, q, quizType, answer, setAnswer, submitted, showHint, toggleHint }) {
+  const gradeable = quizType !== "sa";
+  const isCorrect = gradeable && submitted && answer?.toUpperCase() === q.a?.toUpperCase();
+  const isWrong = gradeable && submitted && !!answer && !isCorrect;
+
+  return (
+    <div
+      style={{
+        background: C.card,
+        border: `1px solid ${submitted && gradeable ? (isCorrect ? GREEN_BORDER : isWrong ? RED_BORDER : C.line) : C.line}`,
+        borderRadius: 12,
+        padding: "14px 16px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 10,
+        flexShrink: 0,
+      }}
+    >
+      {/* 번호 + 질문 */}
+      <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+        <span
+          style={{
+            flexShrink: 0,
+            width: 24,
+            height: 24,
+            borderRadius: "50%",
+            background:
+              submitted && gradeable
+                ? isCorrect
+                  ? GREEN
+                  : isWrong
+                    ? RED
+                    : C.accentSoft
+                : C.accentSoft,
+            color:
+              submitted && gradeable
+                ? isCorrect
+                  ? GREEN_TEXT
+                  : isWrong
+                    ? "var(--c-error)"
+                    : C.accent
+                : C.accent,
+            fontSize: 12,
+            fontWeight: 700,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          {idx + 1}
+        </span>
+        <div style={{ fontSize: 14, lineHeight: 1.6, color: C.ink, fontWeight: 500 }}>{q.q}</div>
+      </div>
+
+      {/* 4지선다 선택지 */}
+      {quizType === "mc" &&
+        q.options?.map((opt, oi) => {
+          const letter = ["A", "B", "C", "D"][oi];
+          const selected = answer === letter;
+          const correct = submitted && q.a?.toUpperCase() === letter;
+          const wrong = submitted && selected && !correct;
+          return (
+            <button
+              key={oi}
+              onClick={() => !submitted && setAnswer(letter)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                border: `1px solid ${correct ? GREEN_BORDER : wrong ? RED_BORDER : selected ? C.accent : C.line}`,
+                background: correct ? GREEN : wrong ? RED : selected ? C.accentSoft : "transparent",
+                borderRadius: 8,
+                padding: "8px 12px",
+                fontSize: 13.5,
+                fontFamily: sans,
+                cursor: submitted ? "default" : "pointer",
+                textAlign: "left",
+                color: correct
+                  ? GREEN_TEXT
+                  : wrong
+                    ? "var(--c-error)"
+                    : selected
+                      ? C.accent
+                      : C.ink,
+                fontWeight: selected || correct ? 600 : 400,
+                transition: "all .12s",
+              }}
+            >
+              <span
+                style={{
+                  width: 22,
+                  height: 22,
+                  borderRadius: "50%",
+                  flexShrink: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  border: `1.5px solid ${correct ? GREEN_TEXT : wrong ? "var(--c-error)" : selected ? C.accent : C.line}`,
+                  background: correct
+                    ? "rgba(34,197,94,0.2)"
+                    : wrong
+                      ? "rgba(239,68,68,0.12)"
+                      : selected
+                        ? C.accent
+                        : "transparent",
+                  color: correct
+                    ? GREEN_TEXT
+                    : wrong
+                      ? "var(--c-error)"
+                      : selected
+                        ? "#fff"
+                        : C.inkSoft,
+                }}
+              >
+                {letter}
+              </span>
+              <span style={{ flex: 1 }}>{opt.replace(/^[A-D]\.\s*/, "")}</span>
+              {correct && <span style={{ fontSize: 13 }}>✓</span>}
+              {wrong && <span style={{ fontSize: 13 }}>✗</span>}
+            </button>
+          );
+        })}
+
+      {/* O/X 선택지 */}
+      {quizType === "tf" && (
+        <div style={{ display: "flex", gap: 8 }}>
+          {["O", "X"].map((v) => {
+            const selected = answer === v;
+            const correct = submitted && q.a?.toUpperCase() === v;
+            const wrong = submitted && selected && !correct;
+            return (
+              <button
+                key={v}
+                onClick={() => !submitted && setAnswer(v)}
+                style={{
+                  flex: 1,
+                  border: `1.5px solid ${correct ? GREEN_BORDER : wrong ? RED_BORDER : selected ? C.accent : C.line}`,
+                  background: correct
+                    ? GREEN
+                    : wrong
+                      ? RED
+                      : selected
+                        ? C.accentSoft
+                        : "transparent",
+                  color: correct
+                    ? GREEN_TEXT
+                    : wrong
+                      ? "var(--c-error)"
+                      : selected
+                        ? C.accent
+                        : C.inkSoft,
+                  borderRadius: 10,
+                  padding: "10px 0",
+                  fontSize: 22,
+                  fontFamily: sans,
+                  fontWeight: 700,
+                  cursor: submitted ? "default" : "pointer",
+                  transition: "all .12s",
+                }}
+              >
+                {v}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* 주관식 입력 */}
+      {quizType === "sa" && (
+        <>
+          <textarea
+            value={answer || ""}
+            onChange={(e) => !submitted && setAnswer(e.target.value)}
+            placeholder="답을 입력하세요…"
+            rows={2}
+            style={{
+              width: "100%",
+              padding: "8px 10px",
+              borderRadius: 8,
+              border: `1px solid ${submitted ? C.line : C.line}`,
+              fontFamily: sans,
+              fontSize: 13,
+              background: submitted ? C.paper2 : C.paper,
+              color: C.ink,
+              resize: "none",
+              outline: "none",
+              boxSizing: "border-box",
+              lineHeight: 1.5,
+              cursor: submitted ? "default" : "text",
+            }}
+          />
+          {submitted && (
+            <div
+              style={{
+                background: GREEN,
+                border: `1px solid ${GREEN_BORDER}`,
+                borderRadius: 8,
+                padding: "8px 12px",
+                fontSize: 13,
+                color: GREEN_TEXT,
+                lineHeight: 1.5,
+              }}
+            >
+              <span style={{ fontWeight: 700 }}>정답: </span>
+              {q.a}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* 힌트 (채점 전) */}
+      {q.hint && !submitted && (
+        <div>
+          <button
+            onClick={toggleHint}
+            style={{
+              border: "none",
+              background: "transparent",
+              color: C.inkSoft,
+              fontSize: 12,
+              padding: 0,
+              cursor: "pointer",
+              fontFamily: sans,
+            }}
+          >
+            {showHint ? "힌트 숨기기 ▲" : "💡 힌트 보기 ▼"}
+          </button>
+          {showHint && (
+            <div
+              style={{
+                marginTop: 5,
+                fontSize: 12.5,
+                color: C.inkSoft,
+                background: C.paper2,
+                borderRadius: 7,
+                padding: "7px 10px",
+                lineHeight: 1.5,
+              }}
+            >
+              {q.hint}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 틀렸을 때 정답 표시 (MC/TF) */}
+      {submitted && gradeable && isWrong && (
+        <div
+          style={{
+            fontSize: 12.5,
+            color: GREEN_TEXT,
+            background: GREEN,
+            borderRadius: 7,
+            padding: "6px 10px",
+          }}
+        >
+          정답: <strong>{q.a}</strong>
+          {q.hint && <span style={{ color: C.inkSoft }}> · {q.hint}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function QuizPanel({ docs, folders }) {
   const [selectedDocId, setSelectedDocId] = useState("");
+  const [quizType, setQuizType] = useState("mc");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [questions, setQuestions] = useState([]);
-  const [current, setCurrent] = useState(0);
-  const [showAnswer, setShowAnswer] = useState(false);
-  const [showHint, setShowHint] = useState(false);
-  const [score, setScore] = useState({ correct: 0, total: 0 });
-  const [done, setDone] = useState(false);
+  const [answers, setAnswers] = useState({});
+  const [submitted, setSubmitted] = useState(false);
+  const [showHints, setShowHints] = useState({});
+
+  const reset = (keepQuestions = false) => {
+    setAnswers({});
+    setSubmitted(false);
+    setShowHints({});
+    if (!keepQuestions) setQuestions([]);
+  };
+
+  const selectDoc = (id) => {
+    setSelectedDocId(id);
+    reset();
+    setError("");
+  };
+
+  const selectType = (t) => {
+    setQuizType(t);
+    reset();
+    setError("");
+  };
 
   const generate = async () => {
     if (!selectedDocId) return;
     setLoading(true);
     setError("");
-    setQuestions([]);
-    setCurrent(0);
-    setShowAnswer(false);
-    setShowHint(false);
-    setScore({ correct: 0, total: 0 });
-    setDone(false);
+    reset();
     try {
-      const data = await postQuiz(selectedDocId, 5);
+      const data = await postQuiz(selectedDocId, 10, quizType);
       if (data.error) throw new Error(data.error);
       if (!data.questions?.length) throw new Error("퀴즈를 생성하지 못했어요.");
       setQuestions(data.questions);
@@ -272,268 +563,324 @@ function QuizPanel({ docs, folders }) {
     }
   };
 
-  const answer = (correct) => {
-    const newScore = { correct: score.correct + (correct ? 1 : 0), total: score.total + 1 };
-    setScore(newScore);
-    if (current + 1 >= questions.length) {
-      setDone(true);
-    } else {
-      setCurrent((c) => c + 1);
-      setShowAnswer(false);
-      setShowHint(false);
-    }
-  };
-
-  const q = questions[current];
+  const gradeable = quizType !== "sa";
+  const allAnswered =
+    questions.length > 0 &&
+    questions.every((_, i) => answers[i] !== undefined && answers[i] !== "");
+  const correctCount =
+    gradeable && submitted
+      ? questions.filter((q, i) => answers[i]?.toUpperCase() === q.a?.toUpperCase()).length
+      : 0;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10, height: "100%" }}>
-      {/* 문서 선택 트리 */}
+    <div style={{ display: "flex", gap: 14, height: "100%", overflow: "hidden" }}>
+      {/* 왼쪽 패널: 유형·문서·생성 */}
       <div
         style={{
-          border: `1px solid ${C.line}`,
-          borderRadius: 8,
-          padding: 4,
-          maxHeight: 160,
+          width: 176,
+          flexShrink: 0,
+          display: "flex",
+          flexDirection: "column",
+          gap: 12,
           overflowY: "auto",
-          flexShrink: 0,
-          background: C.paper,
         }}
       >
-        <DocTree
-          docs={docs}
-          folders={folders}
-          selectedId={selectedDocId}
-          onSelect={(id) => {
-            setSelectedDocId(id);
-            setQuestions([]);
-            setDone(false);
-            setError("");
-          }}
-        />
-      </div>
-
-      <button
-        onClick={generate}
-        disabled={!selectedDocId || loading}
-        style={{
-          border: "none",
-          background: selectedDocId && !loading ? C.ink : C.line,
-          color: selectedDocId && !loading ? C.paper : C.inkSoft,
-          padding: "7px 16px",
-          borderRadius: 8,
-          fontSize: 13,
-          fontFamily: sans,
-          cursor: selectedDocId && !loading ? "pointer" : "default",
-          flexShrink: 0,
-        }}
-      >
-        {loading ? "생성 중…" : "퀴즈 생성"}
-      </button>
-
-      {error && (
-        <div
-          style={{
-            fontSize: 13,
-            color: C.error,
-            padding: "8px 12px",
-            background: C.errorSoft,
-            borderRadius: 8,
-            flexShrink: 0,
-          }}
-        >
-          {error}
+        {/* 유형 선택 */}
+        <div>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: C.inkSoft,
+              textTransform: "uppercase",
+              letterSpacing: "0.06em",
+              marginBottom: 6,
+            }}
+          >
+            유형
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {QUIZ_TYPES.map(({ id, label }) => (
+              <button
+                key={id}
+                onClick={() => selectType(id)}
+                style={{
+                  border: `1px solid ${quizType === id ? C.accent : C.line}`,
+                  background: quizType === id ? C.accentSoft : "transparent",
+                  color: quizType === id ? C.accent : C.inkSoft,
+                  borderRadius: 7,
+                  padding: "6px 12px",
+                  fontSize: 13,
+                  fontFamily: sans,
+                  fontWeight: quizType === id ? 600 : 400,
+                  cursor: "pointer",
+                  textAlign: "left",
+                  transition: "all .15s",
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
-      )}
 
-      {questions.length > 0 && !done && q && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, overflowY: "auto" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontSize: 12, color: C.inkSoft }}>
-              {current + 1} / {questions.length}
-            </span>
-            <span style={{ fontSize: 12, color: C.inkSoft }}>
-              맞춤: {score.correct} / {score.total}
-            </span>
+        {/* 문서 선택 */}
+        <div>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: C.inkSoft,
+              textTransform: "uppercase",
+              letterSpacing: "0.06em",
+              marginBottom: 5,
+            }}
+          >
+            문서
           </div>
           <div
             style={{
-              background: C.card,
               border: `1px solid ${C.line}`,
-              borderRadius: 10,
-              padding: "14px 16px",
-              fontSize: 14,
-              lineHeight: 1.6,
-              fontWeight: 500,
-              color: C.ink,
-            }}
-          >
-            {q.q}
-          </div>
-
-          {!showAnswer && (
-            <div style={{ display: "flex", gap: 8 }}>
-              {q.hint && (
-                <button
-                  onClick={() => setShowHint((v) => !v)}
-                  style={{
-                    border: `1px solid ${C.line}`,
-                    background: "transparent",
-                    color: C.inkSoft,
-                    padding: "6px 12px",
-                    borderRadius: 7,
-                    fontSize: 12,
-                    fontFamily: sans,
-                    cursor: "pointer",
-                  }}
-                >
-                  {showHint ? "힌트 숨기기" : "💡 힌트"}
-                </button>
-              )}
-              <button
-                onClick={() => setShowAnswer(true)}
-                style={{
-                  flex: 1,
-                  border: "none",
-                  background: C.ink,
-                  color: C.paper,
-                  padding: "6px 0",
-                  borderRadius: 7,
-                  fontSize: 13,
-                  fontFamily: sans,
-                  cursor: "pointer",
-                }}
-              >
-                정답 보기
-              </button>
-            </div>
-          )}
-
-          {showHint && !showAnswer && (
-            <div
-              style={{
-                fontSize: 12.5,
-                color: C.inkSoft,
-                background: C.paper2,
-                borderRadius: 7,
-                padding: "8px 12px",
-                lineHeight: 1.5,
-              }}
-            >
-              💡 {q.hint}
-            </div>
-          )}
-
-          {showAnswer && (
-            <>
-              <div
-                style={{
-                  background: C.accentSoft,
-                  border: `1px solid ${C.accent}`,
-                  borderRadius: 10,
-                  padding: "12px 16px",
-                  fontSize: 13.5,
-                  lineHeight: 1.6,
-                  color: C.ink,
-                }}
-              >
-                <span style={{ fontWeight: 600, color: C.accent, marginRight: 6 }}>정답:</span>
-                {q.a}
-              </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button
-                  onClick={() => answer(false)}
-                  style={{
-                    flex: 1,
-                    border: `1px solid ${C.line}`,
-                    background: "transparent",
-                    color: C.inkSoft,
-                    padding: "7px 0",
-                    borderRadius: 7,
-                    fontSize: 13,
-                    fontFamily: sans,
-                    cursor: "pointer",
-                  }}
-                >
-                  ✗ 틀렸어요
-                </button>
-                <button
-                  onClick={() => answer(true)}
-                  style={{
-                    flex: 1,
-                    border: "none",
-                    background: C.ink,
-                    color: C.paper,
-                    padding: "7px 0",
-                    borderRadius: 7,
-                    fontSize: 13,
-                    fontFamily: sans,
-                    cursor: "pointer",
-                  }}
-                >
-                  ✓ 맞췄어요
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
-      {done && (
-        <div style={{ textAlign: "center", padding: "20px 0" }}>
-          <div style={{ fontSize: 28, marginBottom: 8 }}>
-            {score.correct === questions.length
-              ? "🎉"
-              : score.correct >= questions.length / 2
-                ? "👍"
-                : "📚"}
-          </div>
-          <div style={{ fontSize: 20, fontWeight: 700, fontFamily: serif, marginBottom: 4 }}>
-            {score.correct} / {questions.length}
-          </div>
-          <div style={{ fontSize: 13, color: C.inkSoft, marginBottom: 16 }}>
-            {score.correct === questions.length
-              ? "완벽해요!"
-              : score.correct >= questions.length / 2
-                ? "잘 하고 있어요!"
-                : "조금 더 복습해봐요!"}
-          </div>
-          <button
-            onClick={generate}
-            style={{
-              border: "none",
-              background: C.ink,
-              color: C.paper,
-              padding: "8px 20px",
               borderRadius: 8,
-              fontSize: 13,
-              fontFamily: sans,
-              cursor: "pointer",
+              padding: 4,
+              background: C.paper,
             }}
           >
-            다시 풀기
-          </button>
+            <DocTree
+              docs={docs}
+              folders={folders}
+              selectedId={selectedDocId}
+              onSelect={selectDoc}
+            />
+          </div>
         </div>
-      )}
 
-      {questions.length === 0 && !loading && !error && (
-        <div
+        <button
+          onClick={generate}
+          disabled={!selectedDocId || loading}
           style={{
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            color: C.inkSoft,
+            border: "none",
+            background: selectedDocId && !loading ? C.accent : C.line,
+            color: selectedDocId && !loading ? "#fff" : C.inkSoft,
+            padding: "8px 0",
+            borderRadius: 8,
             fontSize: 13,
-            padding: "24px 0",
-            gap: 6,
+            fontFamily: sans,
+            fontWeight: 600,
+            cursor: selectedDocId && !loading ? "pointer" : "default",
+            transition: "all .15s",
           }}
         >
-          <div style={{ fontSize: 28 }}>🎯</div>
-          문서를 선택하고 퀴즈를 생성해보세요.
-        </div>
-      )}
+          {loading ? "생성 중…" : "퀴즈 생성"}
+        </button>
+
+        {error && (
+          <div
+            style={{
+              fontSize: 12.5,
+              color: C.error,
+              background: C.errorSoft,
+              border: `1px solid ${C.errorLine}`,
+              borderRadius: 7,
+              padding: "7px 10px",
+              lineHeight: 1.5,
+            }}
+          >
+            {error}
+          </div>
+        )}
+      </div>
+
+      {/* 오른쪽: 문제 목록 */}
+      <div
+        style={{
+          flex: 1,
+          minWidth: 0,
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+        }}
+      >
+        {/* 빈 상태 */}
+        {questions.length === 0 && !loading && (
+          <div
+            style={{
+              flex: 1,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              color: C.inkSoft,
+              fontSize: 13,
+              gap: 6,
+            }}
+          >
+            <div style={{ fontSize: 28 }}>🎯</div>
+            문서를 선택하고 퀴즈를 생성해보세요.
+          </div>
+        )}
+
+        {/* 로딩 */}
+        {loading && (
+          <div
+            style={{
+              flex: 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: C.inkSoft,
+              gap: 8,
+            }}
+          >
+            <span
+              className="spin"
+              style={{
+                width: 16,
+                height: 16,
+                border: `2px solid ${C.accentSoft}`,
+                borderTopColor: C.accent,
+                borderRadius: "50%",
+                display: "inline-block",
+              }}
+            />
+            퀴즈 생성 중…
+          </div>
+        )}
+
+        {questions.length > 0 && (
+          <>
+            {/* 채점 결과 배너 */}
+            {submitted && (
+              <div
+                style={{
+                  flexShrink: 0,
+                  marginBottom: 12,
+                  padding: "10px 16px",
+                  background: !gradeable
+                    ? C.paper2
+                    : correctCount === questions.length
+                      ? GREEN
+                      : C.paper2,
+                  border: `1px solid ${!gradeable ? C.line : correctCount === questions.length ? GREEN_BORDER : C.line}`,
+                  borderRadius: 10,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                }}
+              >
+                {gradeable ? (
+                  <>
+                    <span style={{ fontSize: 20 }}>
+                      {correctCount === questions.length
+                        ? "🎉"
+                        : correctCount >= questions.length / 2
+                          ? "👍"
+                          : "📚"}
+                    </span>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: C.ink }}>
+                      {correctCount} / {questions.length}
+                    </span>
+                    <span style={{ fontSize: 13, color: C.inkSoft }}>
+                      {correctCount === questions.length
+                        ? "완벽해요!"
+                        : correctCount >= questions.length / 2
+                          ? "잘 하고 있어요!"
+                          : "조금 더 복습해봐요!"}
+                    </span>
+                  </>
+                ) : (
+                  <span style={{ fontSize: 13, color: C.inkSoft }}>
+                    정답이 공개됐어요. 직접 비교해 보세요.
+                  </span>
+                )}
+                <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+                  <button
+                    onClick={() => reset(true)}
+                    style={{
+                      border: `1px solid ${C.line}`,
+                      background: "transparent",
+                      color: C.inkSoft,
+                      padding: "4px 12px",
+                      borderRadius: 6,
+                      fontSize: 12.5,
+                      fontFamily: sans,
+                      cursor: "pointer",
+                    }}
+                  >
+                    다시 풀기
+                  </button>
+                  <button
+                    onClick={generate}
+                    style={{
+                      border: "none",
+                      background: C.accent,
+                      color: "#fff",
+                      padding: "4px 12px",
+                      borderRadius: 6,
+                      fontSize: 12.5,
+                      fontFamily: sans,
+                      cursor: "pointer",
+                      fontWeight: 600,
+                    }}
+                  >
+                    새 퀴즈
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* 문제 목록 */}
+            <div
+              style={{
+                flex: 1,
+                overflowY: "auto",
+                display: "flex",
+                flexDirection: "column",
+                gap: 10,
+              }}
+            >
+              {questions.map((q, i) => (
+                <QuestionCard
+                  key={i}
+                  idx={i}
+                  q={q}
+                  quizType={quizType}
+                  answer={answers[i]}
+                  setAnswer={(v) => setAnswers((prev) => ({ ...prev, [i]: v }))}
+                  submitted={submitted}
+                  showHint={!!showHints[i]}
+                  toggleHint={() => setShowHints((prev) => ({ ...prev, [i]: !prev[i] }))}
+                />
+              ))}
+
+              {/* 채점 버튼 */}
+              {!submitted && (
+                <button
+                  onClick={() => setSubmitted(true)}
+                  disabled={!allAnswered}
+                  style={{
+                    flexShrink: 0,
+                    border: "none",
+                    background: allAnswered ? C.accent : C.line,
+                    color: allAnswered ? "#fff" : C.inkSoft,
+                    padding: "11px 0",
+                    borderRadius: 10,
+                    fontSize: 14,
+                    fontFamily: sans,
+                    fontWeight: 600,
+                    cursor: allAnswered ? "pointer" : "default",
+                    marginTop: 4,
+                    transition: "all .15s",
+                  }}
+                >
+                  {quizType === "sa" ? "정답 보기" : "채점하기"}
+                </button>
+              )}
+              <div style={{ height: 8, flexShrink: 0 }} />
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

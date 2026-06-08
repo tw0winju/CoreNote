@@ -100,11 +100,11 @@ export const extractMemory = (q, a) =>
   }).then((r) => r.json());
 
 // ── 학습 ──────────────────────────────────────────────────────────────────────
-export const postQuiz = (docId, count = 5) =>
+export const postQuiz = (docId, count = 10, type = "mc") =>
   fetch("/api/quiz", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ docId, count }),
+    body: JSON.stringify({ docId, count, type }),
   }).then((r) => r.json());
 
 export const fetchDocText = (docId) => fetch(`/api/docs/${docId}/text`).then((r) => r.json());
