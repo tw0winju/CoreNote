@@ -239,7 +239,9 @@ async function extractTextOCR(buf, onProgress, pageFrom = null, pageTo = null) {
       await Promise.all(
         workers.map(async (worker, wi) => {
           for (let i = wi; i < pngFiles.length; i += CONCURRENCY) {
-            const { data: { text } } = await worker.recognize(path.join(tmpDir, pngFiles[i]));
+            const {
+              data: { text },
+            } = await worker.recognize(path.join(tmpDir, pngFiles[i]));
             results[i] = text;
             completed++;
             if (onProgress) onProgress(completed, pngFiles.length);
@@ -512,7 +514,10 @@ app.post("/api/index", async (req, res) => {
       }
       // 제어 문자·null 바이트 제거 (임베딩 오류 방지)
       // eslint-disable-next-line no-control-regex
-      text = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, " ").replace(/\s+/g, " ").trim();
+      text = text
+        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
       if (text.length < 30) {
         send({
           type: "error",
@@ -653,8 +658,16 @@ app.delete("/api/docs/:id", async (req, res) => {
 // ---------- 4) 설정 ----------
 app.get("/api/settings", (_req, res) => res.json(settings));
 app.post("/api/settings", (req, res) => {
-  const { chatModel, embedModel, maxChunkChars, topK, hydeEnabled, rerankEnabled, systemPrompt, memoryEnabled } =
-    req.body;
+  const {
+    chatModel,
+    embedModel,
+    maxChunkChars,
+    topK,
+    hydeEnabled,
+    rerankEnabled,
+    systemPrompt,
+    memoryEnabled,
+  } = req.body;
   if (chatModel !== undefined) settings.chatModel = String(chatModel).trim();
   if (embedModel !== undefined) settings.embedModel = String(embedModel).trim();
   if (maxChunkChars !== undefined) settings.maxChunkChars = Math.max(200, Number(maxChunkChars));
@@ -729,7 +742,12 @@ A: ${a.slice(0, 400)}`;
       .slice(0, 3);
 
     for (const content of extracted) {
-      memories.unshift({ id: crypto.randomUUID(), content: content.trim(), createdAt: Date.now(), source: "auto" });
+      memories.unshift({
+        id: crypto.randomUUID(),
+        content: content.trim(),
+        createdAt: Date.now(),
+        source: "auto",
+      });
     }
     if (extracted.length > 0) saveMemories();
     res.json({ extracted });
@@ -750,7 +768,10 @@ app.post("/api/quiz", async (req, res) => {
     chunks.sort((a, b) => a.index - b.index);
     const step = Math.max(1, Math.floor(chunks.length / 8));
     const sampled = chunks.filter((_, i) => i % step === 0).slice(0, 8);
-    const text = sampled.map((c) => c.text).join("\n\n").slice(0, 3000);
+    const text = sampled
+      .map((c) => c.text)
+      .join("\n\n")
+      .slice(0, 3000);
     const prompt = `다음 내용을 바탕으로 학습 퀴즈 ${count}개를 만들어줘.
 JSON 배열 형식으로만 출력해. 각 항목: {"q": "질문", "a": "정답", "hint": "힌트(한 줄)"}
 <think> 없이 JSON만 출력.
@@ -768,7 +789,9 @@ ${text}`;
     const cleaned = raw.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
     const match = cleaned.match(/\[[\s\S]*\]/);
     if (!match) return res.status(502).json({ error: "퀴즈 파싱 실패" });
-    const questions = JSON.parse(match[0]).filter((q) => q.q && q.a).slice(0, count);
+    const questions = JSON.parse(match[0])
+      .filter((q) => q.q && q.a)
+      .slice(0, count);
     res.json({ questions });
   } catch (e) {
     res.status(502).json({ error: e.message || "퀴즈 생성 중 오류" });
@@ -800,11 +823,52 @@ app.post("/api/summary", async (req, res) => {
     const prompt = `아래는 문서 전체 내용이다. 이 내용을 빠짐없이 포괄하는 상세 요약을 작성해.
 
 요약 규칙:
-1. 문서에 등장하는 모든 주요 주제·개념·항목을 반드시 포함한다.
-2. 소제목(##)으로 섹션을 나누고, 각 섹션 아래에 핵심 내용을 bullet(-)로 나열한다.
-3. 중요 수치·용어·예시는 그대로 유지한다.
-4. 내용을 임의로 줄이거나 생략하지 않는다.
-5. <think> 태그 없이 바로 마크다운으로 출력한다.
+
+[목표]
+문서의 모든 핵심 내용을 학습용으로 재구성한다.
+단순 압축 요약이 아니라 시험 공부, 복습, 개념 이해가 가능하도록 정보를 최대한 보존한다.
+
+[내용 보존 규칙]
+1. 문서에 등장하는 모든 주요 주제, 개념, 정의, 절차, 특징, 장단점, 비교 항목을 포함한다.
+2. 특정 장(Chapter)이나 섹션의 내용을 임의로 생략하지 않는다.
+3. 중요 수치, 공식, 용어, 예시, 표의 핵심 내용은 원문 그대로 유지한다.
+4. 문서에 포함된 목록, 단계, 분류 체계는 가능한 한 모두 유지한다.
+5. 내용이 많더라도 압축을 위해 정보를 삭제하지 않는다.
+6. 요약 과정에서 새로운 정보를 추가하거나 추론하지 않는다.
+7. 정보 보존을 최우선으로 하며, 정보 손실이 발생한다면 더 긴 답변을 선택한다.
+8. 원문에 존재하는 중요 키워드와 전문 용어는 반드시 포함한다.
+
+[구조 규칙]
+1. 원문의 계층 구조를 최대한 유지한다.
+2. 대주제는 ##, 소주제는 ### 형식을 사용한다.
+3. 각 항목은 bullet(-) 형식으로 정리한다.
+4. 관련 내용은 하나의 섹션으로 묶어 정리한다.
+5. 독립적인 개념은 별도 bullet로 분리한다.
+6. 여러 개념이 하나의 문장에 포함된 경우 각각 분리하여 정리한다.
+
+[학습 최적화 규칙]
+1. 정의 → 특징 → 예시 순으로 정리한다.
+2. 비교 대상이 있는 경우 표 형태로 정리한다.
+3. 암기해야 할 내용은 별도 bullet로 강조한다.
+4. 시험 출제 가능성이 높은 핵심 개념은 누락 없이 포함한다.
+5. 개념 간 관계가 있다면 연결성을 명확히 설명한다.
+
+[누락 방지 규칙]
+1. 문서의 모든 제목, 소제목, 항목을 검토한 후 요약한다.
+2. 각 섹션마다 핵심 개념이 최소 1개 이상 포함되어야 한다.
+3. 원문에 존재하는 표, 그림 설명, 예시, 공식도 가능한 범위 내에서 포함한다.
+4. 요약 완료 후 "원문에 있었지만 누락된 개념이 없는지" 자체 검증한 뒤 출력한다.
+
+[출력 규칙]
+1. 반드시 Markdown 형식으로 출력한다.
+2. <think> 태그를 출력하지 않는다.
+3. 서론, 결론, 불필요한 설명 없이 요약 내용만 출력한다.
+4. "요약하겠습니다", "다음은 요약입니다" 등의 문구를 출력하지 않는다.
+5. 문서 길이에 맞게 충분한 분량으로 작성하며 임의로 축약하지 않는다.
+6. 정보 밀도를 높이고 불필요한 수식어는 제거한다.
+7. 출력 토큰 한도에 도달할 경우 중간 생략 없이 가능한 범위까지 순서대로 출력한다.
+
+중요: 요약 품질보다 정보 보존을 우선한다. 내용이 길어지더라도 원문의 핵심 정보를 절대 생략하지 않는다.
 
 ---
 ${text}
@@ -845,10 +909,15 @@ app.post("/api/ask", async (req, res) => {
         const { createWorker } = await import("tesseract.js");
         const worker = await createWorker("kor+eng");
         const buf = Buffer.from(image, "base64");
-        const { data: { text } } = await worker.recognize(buf);
+        const {
+          data: { text },
+        } = await worker.recognize(buf);
         await worker.terminate();
         // eslint-disable-next-line no-control-regex
-        imageText = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, " ").replace(/\s+/g, " ").trim();
+        imageText = text
+          .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
       } catch (e) {
         console.error("[image-ocr]", e);
       }
@@ -907,7 +976,9 @@ ${context}${imageBlock}
 [질문]
 ${question}`;
 
-      const docNames = [...new Set(allChunks.map((c) => docs.find((d) => d.id === c.docId)?.name || c.docName))];
+      const docNames = [
+        ...new Set(allChunks.map((c) => docs.find((d) => d.id === c.docId)?.name || c.docName)),
+      ];
       send({
         type: "sources",
         sources: docNames.map((name, i) => ({
@@ -920,9 +991,14 @@ ${question}`;
       });
 
       const safeHistory = Array.isArray(history) ? history.slice(-20) : [];
-      const memoryBlock = settings.memoryEnabled && memories.length > 0
-        ? "\n\n[기억]\n" + memories.slice(0, 15).map((m) => `- ${m.content}`).join("\n")
-        : "";
+      const memoryBlock =
+        settings.memoryEnabled && memories.length > 0
+          ? "\n\n[기억]\n" +
+            memories
+              .slice(0, 15)
+              .map((m) => `- ${m.content}`)
+              .join("\n")
+          : "";
       const ollamaRes = await ollamaFetch("/api/chat", {
         model: settings.chatModel,
         messages: [
@@ -937,16 +1013,32 @@ ${question}`;
       if (!ollamaRes.ok) {
         const b = await ollamaRes.text().catch(() => "");
         if (ollamaRes.status === 404 || /not found|pull/i.test(b))
-          send({ type: "error", error: `모델(${settings.chatModel})이 없습니다. 'ollama pull ${settings.chatModel}' 을 실행하세요.` });
+          send({
+            type: "error",
+            error: `모델(${settings.chatModel})이 없습니다. 'ollama pull ${settings.chatModel}' 을 실행하세요.`,
+          });
         else send({ type: "error", error: "처리 중 오류가 발생했습니다." });
         return res.end();
       }
 
-      let inThink = false, tail = "";
+      let inThink = false,
+        tail = "";
       const processToken = (token) => {
-        if (inThink) { if (token.includes("</think>")) { inThink = false; tail = token.split("</think>").slice(1).join(""); } return; }
-        if (token.includes("<think>")) { inThink = true; const pre = token.split("<think>")[0]; if (pre) send({ type: "token", text: pre }); return; }
-        const combined = tail + token; tail = "";
+        if (inThink) {
+          if (token.includes("</think>")) {
+            inThink = false;
+            tail = token.split("</think>").slice(1).join("");
+          }
+          return;
+        }
+        if (token.includes("<think>")) {
+          inThink = true;
+          const pre = token.split("<think>")[0];
+          if (pre) send({ type: "token", text: pre });
+          return;
+        }
+        const combined = tail + token;
+        tail = "";
         const out = combined.replace(/```(?:\w+\n?)?/g, "");
         if (out) send({ type: "token", text: out });
       };
@@ -958,13 +1050,20 @@ ${question}`;
         const { done, value } = await reader2.read();
         if (done) break;
         lb2 += dec2.decode(value, { stream: true });
-        const lines = lb2.split("\n"); lb2 = lines.pop();
+        const lines = lb2.split("\n");
+        lb2 = lines.pop();
         for (const line of lines) {
           if (!line.trim()) continue;
-          try { const chunk = JSON.parse(line); if (chunk.message?.content) processToken(chunk.message.content); } catch {}
+          try {
+            const chunk = JSON.parse(line);
+            if (chunk.message?.content) processToken(chunk.message.content);
+          } catch {}
         }
       }
-      if (!inThink && tail) { const c = tail.replace(/```(?:\w+\n?)?/g, ""); if (c) send({ type: "token", text: c }); }
+      if (!inThink && tail) {
+        const c = tail.replace(/```(?:\w+\n?)?/g, "");
+        if (c) send({ type: "token", text: c });
+      }
       return res.end();
     }
     // ────────────────────────────────────────────────────────────────────────
@@ -1059,9 +1158,7 @@ ${question}`;
       }),
     );
     const context = contextParts.join("\n\n");
-    const imageBlock = imageText
-      ? `\n\n[첨부 이미지에서 추출한 텍스트]\n${imageText}`
-      : "";
+    const imageBlock = imageText ? `\n\n[첨부 이미지에서 추출한 텍스트]\n${imageText}` : "";
     const prompt = `아래 [참고자료]에 있는 내용만 근거로 사용자의 질문에 한국어로 답하세요.
 - 자료에 없는 내용은 지어내지 말고 "자료에서 찾을 수 없습니다"라고 답합니다.
 - 답에 사용한 근거는 문장 끝에 [번호] 형식으로 표시합니다.
@@ -1075,7 +1172,11 @@ ${question}`;
     const safeHistory = Array.isArray(history) ? history.slice(-20) : [];
     const memoryBlock =
       settings.memoryEnabled && memories.length > 0
-        ? "\n\n[기억]\n" + memories.slice(0, 15).map((m) => `- ${m.content}`).join("\n")
+        ? "\n\n[기억]\n" +
+          memories
+            .slice(0, 15)
+            .map((m) => `- ${m.content}`)
+            .join("\n")
         : "";
     const ollamaRes = await ollamaFetch("/api/chat", {
       model: settings.chatModel,
