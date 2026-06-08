@@ -3,25 +3,6 @@ import ReactMarkdown from "react-markdown";
 import { C, sans, serif } from "../theme";
 import { postQuiz, postSummary, readSSE } from "../api";
 
-function StatCard({ icon, value, label }) {
-  return (
-    <div
-      style={{
-        background: C.card,
-        border: `1px solid ${C.line}`,
-        borderRadius: 14,
-        padding: "16px 20px",
-        textAlign: "center",
-        flex: 1,
-      }}
-    >
-      <div style={{ fontSize: 22, marginBottom: 4 }}>{icon}</div>
-      <div style={{ fontSize: 26, fontWeight: 700, fontFamily: serif, color: C.ink }}>{value}</div>
-      <div style={{ fontSize: 12, color: C.inkSoft, marginTop: 2 }}>{label}</div>
-    </div>
-  );
-}
-
 // ── 공용 디렉터리 트리 ────────────────────────────────────────────────────────
 
 function DocItem({ doc, selected, onSelect, indent = false }) {
@@ -659,13 +640,16 @@ function SummaryPanel({ docs, folders }) {
 
 // ── LearnPage ─────────────────────────────────────────────────────────────────
 
-export default function LearnPage({ chat, docs: docsHook, memory }) {
-  const { favorites, removeFavorite, sessions, conversation } = chat;
-  const { docs, folders } = docsHook;
-  const { memories } = memory;
+const TABS = [
+  { id: "favorites", label: "★ 즐겨찾기" },
+  { id: "quiz",      label: "🎯 퀴즈" },
+  { id: "summary",   label: "📄 문서 요약" },
+];
 
-  const totalQuestions =
-    conversation.length + sessions.reduce((s, sess) => s + (sess.conversation?.length || 0), 0);
+export default function LearnPage({ chat, docs: docsHook }) {
+  const { favorites, removeFavorite } = chat;
+  const { docs, folders } = docsHook;
+  const [activeTab, setActiveTab] = useState("quiz");
 
   return (
     <div
@@ -675,88 +659,77 @@ export default function LearnPage({ chat, docs: docsHook, memory }) {
         flexDirection: "column",
         overflow: "hidden",
         padding: "0 24px 16px",
-        gap: 16,
+        gap: 0,
       }}
     >
-      {/* 통계 카드 */}
-      <div style={{ display: "flex", gap: 12, flexShrink: 0 }}>
-        <StatCard icon="💬" value={totalQuestions} label="총 질문 수" />
-        <StatCard icon="★" value={favorites.length} label="즐겨찾기" />
-        <StatCard icon="🧠" value={memories.length} label="기억" />
-        <StatCard icon="📄" value={docs.length} label="색인 문서" />
-      </div>
-
-      {/* 메인 2열 */}
-      <div style={{ flex: 1, display: "flex", gap: 16, overflow: "hidden", minHeight: 0 }}>
-        {/* 즐겨찾기 */}
-        <div
-          style={{
-            flex: "0 0 340px",
-            display: "flex",
-            flexDirection: "column",
-            gap: 10,
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              fontFamily: serif,
-              fontSize: 15,
-              fontWeight: 700,
-              flexShrink: 0,
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-            }}
-          >
-            <span>★</span> 즐겨찾기 복습
-            {favorites.length > 0 && (
-              <span style={{ fontSize: 12, color: C.inkSoft, fontWeight: 400, fontFamily: sans }}>
-                {favorites.length}개
-              </span>
-            )}
-          </div>
-          <div style={{ flex: 1, overflowY: "auto" }}>
-            <FavoritesPanel favorites={favorites} onRemove={removeFavorite} />
-          </div>
-        </div>
-
-        {/* 퀴즈 */}
-        <div
-          style={{
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            gap: 10,
-            overflow: "hidden",
-          }}
-        >
-          <div style={{ fontFamily: serif, fontSize: 15, fontWeight: 700, flexShrink: 0 }}>
-            🎯 퀴즈
-          </div>
-          <div style={{ flex: 1, overflowY: "auto" }}>
-            <QuizPanel docs={docs} folders={folders} />
-          </div>
-        </div>
-      </div>
-
-      {/* 문서 요약 */}
+      {/* 탭 헤더 */}
       <div
         style={{
-          flexShrink: 0,
-          height: 300,
-          background: C.card,
-          border: `1px solid ${C.line}`,
-          borderRadius: 14,
-          padding: "14px 18px",
           display: "flex",
-          flexDirection: "column",
+          gap: 4,
+          borderBottom: `1px solid ${C.line}`,
+          flexShrink: 0,
+          paddingBottom: 0,
+          marginBottom: 16,
         }}
       >
-        <div style={{ fontFamily: serif, fontSize: 15, fontWeight: 700, marginBottom: 10, flexShrink: 0 }}>
-          📄 문서 요약
-        </div>
-        <SummaryPanel docs={docs} folders={folders} />
+        {TABS.map((tab) => {
+          const active = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                border: "none",
+                borderBottom: active ? `2px solid ${C.accent}` : "2px solid transparent",
+                background: "transparent",
+                color: active ? C.accent : C.inkSoft,
+                fontFamily: sans,
+                fontSize: 13.5,
+                fontWeight: active ? 600 : 400,
+                padding: "8px 16px",
+                cursor: "pointer",
+                marginBottom: -1,
+                transition: "color 0.12s",
+              }}
+            >
+              {tab.label}
+              {tab.id === "favorites" && favorites.length > 0 && (
+                <span
+                  style={{
+                    marginLeft: 5,
+                    fontSize: 11,
+                    background: active ? C.accentSoft : C.paper2,
+                    color: active ? C.accent : C.inkSoft,
+                    borderRadius: 10,
+                    padding: "1px 6px",
+                  }}
+                >
+                  {favorites.length}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* 탭 콘텐츠 */}
+      <div style={{ flex: 1, overflow: "hidden", minHeight: 0 }}>
+        {activeTab === "favorites" && (
+          <div style={{ height: "100%", overflowY: "auto" }}>
+            <FavoritesPanel favorites={favorites} onRemove={removeFavorite} />
+          </div>
+        )}
+        {activeTab === "quiz" && (
+          <div style={{ height: "100%", overflowY: "auto" }}>
+            <QuizPanel docs={docs} folders={folders} />
+          </div>
+        )}
+        {activeTab === "summary" && (
+          <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+            <SummaryPanel docs={docs} folders={folders} />
+          </div>
+        )}
       </div>
     </div>
   );
