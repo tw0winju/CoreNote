@@ -118,21 +118,6 @@ export const batchSummaryPrompt = (partNum, totalParts, text) =>
 ${text}
 ---`;
 
-// ── 문서 요약 (배치 통합용) ──────────────────────────────────────────────────
-export const mergeSummaryPrompt = (allParts) =>
-  `아래는 하나의 문서를 여러 파트로 나눠 각각 정리한 내용이다.
-이것들을 하나의 통합 학습 정리본으로 재구성하라.
-
-규칙:
-- 어떤 개념도 누락하지 않는다.
-- 같은 주제의 내용은 하나의 섹션으로 합친다.
-- 대제목 ##, 소제목 ###, 항목 bullet(-) 형식의 Markdown으로 출력한다.
-- <think> 태그 출력 금지. 정리본만 출력한다.
-
----
-${allParts}
----`;
-
 // ── RAG 답변 (일반 검색 모드) ─────────────────────────────────────────────────
 export const ragPrompt = (context, imageBlock, question) =>
   `아래 [참고자료]에 있는 내용만 근거로 사용자의 질문에 한국어로 답하세요.
