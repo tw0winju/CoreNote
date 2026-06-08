@@ -42,7 +42,16 @@ const DEFAULT_SETTINGS = {
   hydeEnabled: false,
   rerankEnabled: false,
   memoryEnabled: true,
-  systemPrompt: "너는 제공된 자료에만 근거해 답하는 정확한 도우미야.",
+  systemPrompt: `너는 학습자의 이해를 돕는 교육 도우미야. 아래 원칙을 반드시 따라.
+
+1. 근거 우선: 제공된 [참고자료]에 있는 내용만 근거로 사용하고, 자료에 없는 내용은 지어내지 않는다.
+2. 전체 조망: 질문과 관련된 자료의 모든 부분을 빠짐없이 참고하고, 여러 곳에 분산된 내용을 통합해서 답한다.
+3. 개념 설명: 핵심 개념은 정의 → 예시 → 의미 순서로 풀어서 설명한다.
+4. 연결 사고: 개념 간 관계(원인-결과, 비교, 상위-하위)를 명시적으로 짚어준다.
+5. 구조화: 내용이 많을 때는 항목·번호·소제목으로 구조화해 전달한다.
+6. 간결함: 불필요한 반복 없이 핵심만 전달하되, 전문 용어는 처음 나올 때 괄호로 뜻을 부연한다.
+7. 확인 질문: 답변 끝에 학습자의 이해를 점검하는 짧은 질문을 1개 덧붙인다.
+8. 출처 표시: 사용한 근거는 문장 끝에 [번호] 형식으로 표시한다.`,
 };
 
 function loadSettings() {
@@ -798,7 +807,7 @@ ${text}`;
 
 // ---------- 5) 질문(검색 + 답변, SSE 스트리밍) ----------
 app.post("/api/ask", async (req, res) => {
-  const { question, history = [], docIds } = req.body;
+  const { question, history = [], docIds, image } = req.body;
   if (!question || !question.trim()) return res.status(400).json({ error: "질문을 입력하세요." });
   if (docs.length === 0) return res.status(400).json({ error: "먼저 문서를 추가하세요." });
 
@@ -809,6 +818,23 @@ app.post("/api/ask", async (req, res) => {
   const send = (obj) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
 
   try {
+    // 이미지 OCR: base64 이미지 → 텍스트 추출
+    let imageText = "";
+    if (image) {
+      try {
+        send({ type: "status", message: "이미지 OCR 중…" });
+        const { createWorker } = await import("tesseract.js");
+        const worker = await createWorker("kor+eng");
+        const buf = Buffer.from(image, "base64");
+        const { data: { text } } = await worker.recognize(buf);
+        await worker.terminate();
+        // eslint-disable-next-line no-control-regex
+        imageText = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, " ").replace(/\s+/g, " ").trim();
+      } catch (e) {
+        console.error("[image-ocr]", e);
+      }
+    }
+
     const table = await getTable();
     if (!table) {
       send({ type: "error", error: "먼저 문서를 추가하세요." });
@@ -905,12 +931,15 @@ app.post("/api/ask", async (req, res) => {
       }),
     );
     const context = contextParts.join("\n\n");
+    const imageBlock = imageText
+      ? `\n\n[첨부 이미지에서 추출한 텍스트]\n${imageText}`
+      : "";
     const prompt = `아래 [참고자료]에 있는 내용만 근거로 사용자의 질문에 한국어로 답하세요.
 - 자료에 없는 내용은 지어내지 말고 "자료에서 찾을 수 없습니다"라고 답합니다.
 - 답에 사용한 근거는 문장 끝에 [번호] 형식으로 표시합니다.
 
 [참고자료]
-${context}
+${context}${imageBlock}
 
 [질문]
 ${question}`;

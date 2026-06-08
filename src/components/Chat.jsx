@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import { C, sans } from "../theme";
 
@@ -262,9 +262,23 @@ export default function Chat({ chat, docs: docsHook }) {
     scrollRef,
     toggleFavorite,
     isFavorited,
+    attachedImage,
+    setAttachedImage,
   } = chat;
 
   const { selectedDocs, docs, setSelectedDocs } = docsHook;
+  const imgInputRef = useRef(null);
+
+  const handleImageFile = (file) => {
+    if (!file || !file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      const base64 = dataUrl.split(",")[1];
+      setAttachedImage({ base64, name: file.name, preview: dataUrl });
+    };
+    reader.readAsDataURL(file);
+  };
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -367,6 +381,13 @@ export default function Chat({ chat, docs: docsHook }) {
                   whiteSpace: "pre-wrap",
                 }}
               >
+                {item.image && (
+                  <img
+                    src={item.image}
+                    alt="첨부 이미지"
+                    style={{ display: "block", maxWidth: "100%", maxHeight: 160, borderRadius: 6, marginBottom: 6, objectFit: "contain" }}
+                  />
+                )}
                 {item.q}
               </div>
 
@@ -477,7 +498,9 @@ export default function Chat({ chat, docs: docsHook }) {
                 display: "inline-block",
               }}
             />
-            <div style={{ fontSize: 13.5, marginTop: 10 }}>관련 부분을 찾아 답을 만드는 중…</div>
+            <div style={{ fontSize: 13.5, marginTop: 10 }}>
+              {result?.status || "관련 부분을 찾아 답을 만드는 중…"}
+            </div>
           </div>
         )}
 
@@ -554,10 +577,47 @@ export default function Chat({ chat, docs: docsHook }) {
           </div>
         )}
 
+        {/* 이미지 미리보기 */}
+        {attachedImage && (
+          <div style={{ position: "relative", display: "inline-block", marginBottom: 8 }}>
+            <img
+              src={attachedImage.preview}
+              alt="첨부 이미지"
+              style={{ maxHeight: 100, maxWidth: 180, borderRadius: 8, border: `1px solid ${C.line}`, objectFit: "contain", display: "block" }}
+            />
+            <button
+              onClick={() => setAttachedImage(null)}
+              style={{
+                position: "absolute", top: -6, right: -6,
+                width: 18, height: 18, borderRadius: "50%",
+                border: "none", background: C.inkSoft, color: C.paper,
+                fontSize: 11, lineHeight: 1, cursor: "pointer", padding: 0,
+              }}
+            >×</button>
+          </div>
+        )}
+
+        {/* 숨김 파일 입력 */}
+        <input
+          ref={imgInputRef}
+          type="file"
+          accept="image/*"
+          style={{ display: "none" }}
+          onChange={(e) => { handleImageFile(e.target.files?.[0]); e.target.value = ""; }}
+        />
+
         <textarea
           value={question}
           onChange={(e) => {
             setQuestion(e.target.value);
+          }}
+          onPaste={(e) => {
+            const items = Array.from(e.clipboardData?.items || []);
+            const imgItem = items.find((it) => it.type.startsWith("image/"));
+            if (imgItem) {
+              e.preventDefault();
+              handleImageFile(imgItem.getAsFile());
+            }
           }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
@@ -580,7 +640,7 @@ export default function Chat({ chat, docs: docsHook }) {
               navigateHistory(1);
             }
           }}
-          placeholder="내 자료에 대해 물어보세요. (Enter로 질문 / Shift+Enter 줄바꿈 / ↑↓ 이전 질문)"
+          placeholder="내 자료에 대해 물어보세요. (Enter로 질문 / Shift+Enter 줄바꿈 / 이미지 붙여넣기 가능)"
           rows={3}
           style={{
             width: "100%",
@@ -608,6 +668,21 @@ export default function Chat({ chat, docs: docsHook }) {
           }}
         >
           {askError && <span style={{ fontSize: 13, color: C.accent, flex: 1 }}>{askError}</span>}
+          <button
+            onClick={() => imgInputRef.current?.click()}
+            title="이미지 첨부 (OCR로 텍스트 추출)"
+            disabled={asking}
+            style={{
+              border: `1px solid ${attachedImage ? C.accent : C.line}`,
+              background: attachedImage ? C.accentSoft : "transparent",
+              color: attachedImage ? C.accent : C.inkSoft,
+              borderRadius: 10,
+              padding: "9px 12px",
+              fontSize: 15,
+              cursor: asking ? "default" : "pointer",
+              lineHeight: 1,
+            }}
+          >🖼</button>
           <button
             onClick={() => ask(selectedDocs)}
             disabled={asking || !question.trim() || docs.length === 0}

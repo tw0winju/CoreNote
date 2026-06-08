@@ -166,7 +166,9 @@ export default function useChat(onMemoryExtracted) {
 
   const isFavorited = (q, a) => favorites.some((f) => f.q === q && f.a === a);
 
-  const _doAsk = async (q, history, selectedDocs) => {
+  const [attachedImage, setAttachedImage] = useState(null); // { base64, name, preview }
+
+  const _doAsk = async (q, history, selectedDocs, image = null) => {
     setAsking(true);
     setAskError("");
     setResult(null);
@@ -181,7 +183,7 @@ export default function useChat(onMemoryExtracted) {
     });
 
     try {
-      const r = await postAsk(q, history, selectedDocs);
+      const r = await postAsk(q, history, selectedDocs, image?.base64 ?? null);
       if (!r.ok) {
         const d = await r.json();
         throw new Error(d.error || "질문 처리 실패");
@@ -190,9 +192,10 @@ export default function useChat(onMemoryExtracted) {
       let answer = "",
         sources = [];
       await readSSE(r, {
+        status: (e) => setResult((p) => ({ ...(p || { sources: [], answer: "" }), status: e.message })),
         token: (e) => {
           answer += e.text;
-          setResult((p) => ({ ...(p || { sources: [] }), answer }));
+          setResult((p) => ({ ...(p || { sources: [] }), answer, status: null }));
           scrollToBottom();
         },
         sources: (e) => {
@@ -201,9 +204,10 @@ export default function useChat(onMemoryExtracted) {
         },
       });
 
-      setConversation((prev) => [...prev, { q, a: answer, sources }]);
+      setConversation((prev) => [...prev, { q, a: answer, sources, image: image?.preview ?? null }]);
       setResult(null);
       setQuestion("");
+      setAttachedImage(null);
       // 기억 자동 추출 (fire-and-forget)
       extractMemory(q, answer)
         .then(({ extracted }) => { if (extracted?.length > 0) onMemoryExtracted?.(); })
@@ -224,7 +228,7 @@ export default function useChat(onMemoryExtracted) {
       { role: "user", content: cq },
       { role: "assistant", content: ca },
     ]);
-    _doAsk(q, history, selectedDocs);
+    _doAsk(q, history, selectedDocs, attachedImage);
   };
 
   const regenerate = (selectedDocs) => {
@@ -272,5 +276,7 @@ export default function useChat(onMemoryExtracted) {
     toggleFavorite,
     removeFavorite,
     isFavorited,
+    attachedImage,
+    setAttachedImage,
   };
 }
