@@ -7,6 +7,16 @@ import crypto from "crypto";
 import { fileURLToPath } from "url";
 import { PDFParse } from "pdf-parse";
 import * as lancedb from "@lancedb/lancedb";
+import {
+  DEFAULT_SYSTEM_PROMPT,
+  HYDE_SYSTEM_PROMPT,
+  rerankPrompt,
+  memoryExtractPrompt,
+  quizPrompt,
+  summaryPrompt,
+  ragPrompt,
+  ragFullContextPrompt,
+} from "./prompts.js";
 
 dotenv.config();
 
@@ -42,16 +52,7 @@ const DEFAULT_SETTINGS = {
   hydeEnabled: false,
   rerankEnabled: false,
   memoryEnabled: true,
-  systemPrompt: `너는 학습자의 이해를 돕는 교육 도우미야. 아래 원칙을 반드시 따라.
-
-1. 근거 우선: 제공된 [참고자료]에 있는 내용만 근거로 사용하고, 자료에 없는 내용은 지어내지 않는다.
-2. 전체 조망: 질문과 관련된 자료의 모든 부분을 빠짐없이 참고하고, 여러 곳에 분산된 내용을 통합해서 답한다.
-3. 개념 설명: 핵심 개념은 정의 → 예시 → 의미 순서로 풀어서 설명한다.
-4. 연결 사고: 개념 간 관계(원인-결과, 비교, 상위-하위)를 명시적으로 짚어준다.
-5. 구조화: 내용이 많을 때는 항목·번호·소제목으로 구조화해 전달한다.
-6. 간결함: 불필요한 반복 없이 핵심만 전달하되, 전문 용어는 처음 나올 때 괄호로 뜻을 부연한다.
-7. 확인 질문: 답변 끝에 학습자의 이해를 점검하는 짧은 질문을 1개 덧붙인다.
-8. 출처 표시: 사용한 근거는 문장 끝에 [번호] 형식으로 표시한다.`,
+  systemPrompt: DEFAULT_SYSTEM_PROMPT,
 };
 
 function loadSettings() {
@@ -359,7 +360,7 @@ function mmr(candidates, qvec, k, lambda = 0.7) {
 // ---------- LLM 재순위화 (G) ----------
 async function llmRerank(question, candidates) {
   const listing = candidates.map((c, i) => `[${i + 1}] ${c.text.slice(0, 300)}`).join("\n\n");
-  const prompt = `다음 구절들이 질문과 관련된 순서대로 번호만 쉼표로 출력하시오.\n\n질문: ${question}\n\n${listing}`;
+  const prompt = rerankPrompt(question, listing);
   try {
     const res = await ollamaFetch("/api/chat", {
       model: settings.chatModel,
@@ -716,12 +717,7 @@ app.post("/api/memories/extract", async (req, res) => {
   const { q, a } = req.body;
   if (!q || !a) return res.json({ extracted: [] });
   try {
-    const prompt = `다음 대화에서 미래 대화에 도움이 될 사용자 관련 중요 사실을 추출하세요.
-규칙: 추출할 내용이 없으면 빈 배열, 최대 3개, 각 80자 이내, 반드시 JSON 배열만 출력.
-예시: ["사용자는 소프트웨어 공학 시험을 준비 중이다", "10장 품질 파트에 집중하고 싶어한다"]
-
-Q: ${q}
-A: ${a.slice(0, 400)}`;
+    const prompt = memoryExtractPrompt(q, a);
 
     const r = await ollamaFetch("/api/chat", {
       model: settings.chatModel,
@@ -772,12 +768,7 @@ app.post("/api/quiz", async (req, res) => {
       .map((c) => c.text)
       .join("\n\n")
       .slice(0, 3000);
-    const prompt = `다음 내용을 바탕으로 학습 퀴즈 ${count}개를 만들어줘.
-JSON 배열 형식으로만 출력해. 각 항목: {"q": "질문", "a": "정답", "hint": "힌트(한 줄)"}
-<think> 없이 JSON만 출력.
-
-내용:
-${text}`;
+    const prompt = quizPrompt(count, text);
     const r = await ollamaFetch("/api/chat", {
       model: settings.chatModel,
       messages: [{ role: "user", content: prompt }],
@@ -820,59 +811,7 @@ app.post("/api/summary", async (req, res) => {
     });
     const text = textParts.join("\n\n").slice(0, 16000);
 
-    const prompt = `아래는 문서 전체 내용이다. 이 내용을 빠짐없이 포괄하는 상세 요약을 작성해.
-
-요약 규칙:
-
-[목표]
-문서의 모든 핵심 내용을 학습용으로 재구성한다.
-단순 압축 요약이 아니라 시험 공부, 복습, 개념 이해가 가능하도록 정보를 최대한 보존한다.
-
-[내용 보존 규칙]
-1. 문서에 등장하는 모든 주요 주제, 개념, 정의, 절차, 특징, 장단점, 비교 항목을 포함한다.
-2. 특정 장(Chapter)이나 섹션의 내용을 임의로 생략하지 않는다.
-3. 중요 수치, 공식, 용어, 예시, 표의 핵심 내용은 원문 그대로 유지한다.
-4. 문서에 포함된 목록, 단계, 분류 체계는 가능한 한 모두 유지한다.
-5. 내용이 많더라도 압축을 위해 정보를 삭제하지 않는다.
-6. 요약 과정에서 새로운 정보를 추가하거나 추론하지 않는다.
-7. 정보 보존을 최우선으로 하며, 정보 손실이 발생한다면 더 긴 답변을 선택한다.
-8. 원문에 존재하는 중요 키워드와 전문 용어는 반드시 포함한다.
-
-[구조 규칙]
-1. 원문의 계층 구조를 최대한 유지한다.
-2. 대주제는 ##, 소주제는 ### 형식을 사용한다.
-3. 각 항목은 bullet(-) 형식으로 정리한다.
-4. 관련 내용은 하나의 섹션으로 묶어 정리한다.
-5. 독립적인 개념은 별도 bullet로 분리한다.
-6. 여러 개념이 하나의 문장에 포함된 경우 각각 분리하여 정리한다.
-
-[학습 최적화 규칙]
-1. 정의 → 특징 → 예시 순으로 정리한다.
-2. 비교 대상이 있는 경우 표 형태로 정리한다.
-3. 암기해야 할 내용은 별도 bullet로 강조한다.
-4. 시험 출제 가능성이 높은 핵심 개념은 누락 없이 포함한다.
-5. 개념 간 관계가 있다면 연결성을 명확히 설명한다.
-
-[누락 방지 규칙]
-1. 문서의 모든 제목, 소제목, 항목을 검토한 후 요약한다.
-2. 각 섹션마다 핵심 개념이 최소 1개 이상 포함되어야 한다.
-3. 원문에 존재하는 표, 그림 설명, 예시, 공식도 가능한 범위 내에서 포함한다.
-4. 요약 완료 후 "원문에 있었지만 누락된 개념이 없는지" 자체 검증한 뒤 출력한다.
-
-[출력 규칙]
-1. 반드시 Markdown 형식으로 출력한다.
-2. <think> 태그를 출력하지 않는다.
-3. 서론, 결론, 불필요한 설명 없이 요약 내용만 출력한다.
-4. "요약하겠습니다", "다음은 요약입니다" 등의 문구를 출력하지 않는다.
-5. 문서 길이에 맞게 충분한 분량으로 작성하며 임의로 축약하지 않는다.
-6. 정보 밀도를 높이고 불필요한 수식어는 제거한다.
-7. 출력 토큰 한도에 도달할 경우 중간 생략 없이 가능한 범위까지 순서대로 출력한다.
-
-중요: 요약 품질보다 정보 보존을 우선한다. 내용이 길어지더라도 원문의 핵심 정보를 절대 생략하지 않는다.
-
----
-${text}
----`;
+    const prompt = summaryPrompt(text);
     const r = await ollamaFetch("/api/chat", {
       model: settings.chatModel,
       messages: [{ role: "user", content: prompt }],
@@ -966,15 +905,7 @@ app.post("/api/ask", async (req, res) => {
 
       const context = textParts.join("\n\n");
       const imageBlock = imageText ? `\n\n[첨부 이미지에서 추출한 텍스트]\n${imageText}` : "";
-      const prompt = `아래 [참고자료]에 있는 내용만 근거로 사용자의 질문에 한국어로 답하세요.
-- 자료에 없는 내용은 지어내지 말고 "자료에서 찾을 수 없습니다"라고 답합니다.
-- 답에 사용한 근거는 해당 내용이 나온 문장 끝에 [문서명] 형식으로 표시합니다.
-
-[참고자료]
-${context}${imageBlock}
-
-[질문]
-${question}`;
+      const prompt = ragFullContextPrompt(context, imageBlock, question);
 
       const docNames = [
         ...new Set(allChunks.map((c) => docs.find((d) => d.id === c.docId)?.name || c.docName)),
@@ -1077,7 +1008,7 @@ ${question}`;
           messages: [
             {
               role: "system",
-              content: "사용자 질문에 대해 간결하게 한 문단으로 가상 답변을 작성하시오.",
+              content: HYDE_SYSTEM_PROMPT,
             },
             { role: "user", content: question },
           ],
@@ -1159,15 +1090,7 @@ ${question}`;
     );
     const context = contextParts.join("\n\n");
     const imageBlock = imageText ? `\n\n[첨부 이미지에서 추출한 텍스트]\n${imageText}` : "";
-    const prompt = `아래 [참고자료]에 있는 내용만 근거로 사용자의 질문에 한국어로 답하세요.
-- 자료에 없는 내용은 지어내지 말고 "자료에서 찾을 수 없습니다"라고 답합니다.
-- 답에 사용한 근거는 문장 끝에 [번호] 형식으로 표시합니다.
-
-[참고자료]
-${context}${imageBlock}
-
-[질문]
-${question}`;
+    const prompt = ragPrompt(context, imageBlock, question);
 
     const safeHistory = Array.isArray(history) ? history.slice(-20) : [];
     const memoryBlock =
