@@ -560,11 +560,12 @@ app.post("/api/index", async (req, res) => {
         return res.end();
       }
       // 제어 문자·null 바이트 제거 (임베딩 오류 방지)
-      // eslint-disable-next-line no-control-regex
+      /* eslint-disable no-control-regex */
       text = text
         .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, " ")
         .replace(/\s+/g, " ")
         .trim();
+      /* eslint-enable no-control-regex */
       if (text.length < 30) {
         send({
           type: "error",
@@ -644,6 +645,29 @@ app.get("/api/docs", (_req, res) => {
     docs: docs.slice().sort((a, b) => b.addedAt - a.addedAt),
     folders: folders.slice().sort((a, b) => a.name.localeCompare(b.name)),
   });
+});
+
+app.get("/api/docs/:id/text", async (req, res) => {
+  const id = req.params.id;
+  try {
+    const table = await getTable();
+    if (!table) return res.status(404).json({ error: "문서를 찾을 수 없어요." });
+    const chunks = await table.query().where(`docId = '${id}'`).toArray();
+    if (!chunks.length) return res.status(404).json({ error: "문서를 찾을 수 없어요." });
+    chunks.sort((a, b) => a.index - b.index);
+    // overlap 제거
+    const parts = chunks.map((chunk, i) => {
+      if (i === 0) return chunk.text;
+      const prev = chunks[i - 1];
+      if (chunk.index !== prev.index + 1) return chunk.text;
+      const sepIdx = chunk.text.indexOf("\n\n");
+      if (sepIdx !== -1 && sepIdx <= OVERLAP_CHARS + 2) return chunk.text.slice(sepIdx + 2);
+      return chunk.text;
+    });
+    res.json({ text: parts.join("\n\n") });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.patch("/api/docs/:id", (req, res) => {
@@ -934,11 +958,12 @@ app.post("/api/ask", async (req, res) => {
           data: { text },
         } = await worker.recognize(buf);
         await worker.terminate();
-        // eslint-disable-next-line no-control-regex
+        /* eslint-disable no-control-regex */
         imageText = text
           .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, " ")
           .replace(/\s+/g, " ")
           .trim();
+        /* eslint-enable no-control-regex */
       } catch (e) {
         console.error("[image-ocr]", e);
       }

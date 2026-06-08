@@ -1,7 +1,8 @@
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { C, sans, serif } from "../theme";
-import { postQuiz, postSummary, readSSE } from "../api";
+import { postQuiz, postSummary, readSSE, fetchDocText } from "../api";
 
 // ── 공용 디렉터리 트리 ────────────────────────────────────────────────────────
 
@@ -226,7 +227,7 @@ function FavoritesPanel({ favorites, onRemove }) {
                   overflowY: "auto",
                 }}
               >
-                <ReactMarkdown>{f.a}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{f.a}</ReactMarkdown>
               </div>
             )}
           </div>
@@ -536,6 +537,43 @@ function QuizPanel({ docs, folders }) {
   );
 }
 
+// ── 마크다운 렌더러 (테이블 포함) ─────────────────────────────────────────────
+
+function MdContent({ children }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        table: ({ children: c }) => (
+          <table
+            style={{ borderCollapse: "collapse", width: "100%", margin: "8px 0", fontSize: 13 }}
+          >
+            {c}
+          </table>
+        ),
+        th: ({ children: c }) => (
+          <th
+            style={{
+              border: `1px solid ${C.line}`,
+              padding: "5px 10px",
+              background: C.paper2,
+              fontWeight: 600,
+              textAlign: "left",
+            }}
+          >
+            {c}
+          </th>
+        ),
+        td: ({ children: c }) => (
+          <td style={{ border: `1px solid ${C.line}`, padding: "5px 10px" }}>{c}</td>
+        ),
+      }}
+    >
+      {children}
+    </ReactMarkdown>
+  );
+}
+
 // ── 요약 ─────────────────────────────────────────────────────────────────────
 
 function SummaryPanel({ docs, folders }) {
@@ -544,6 +582,9 @@ function SummaryPanel({ docs, folders }) {
   const [cached, setCached] = useState({});
   const [loading, setLoading] = useState(null);
   const [progress, setProgress] = useState("");
+  const [showOriginal, setShowOriginal] = useState(false);
+  const [originals, setOriginals] = useState({});
+  const [origLoading, setOrigLoading] = useState(false);
 
   const fetchSummary = async (docId, force = false) => {
     setSelectedDocId(docId);
@@ -568,38 +609,128 @@ function SummaryPanel({ docs, folders }) {
     }
   };
 
-  const regenerate = (e) => {
-    e.stopPropagation();
-    if (selectedDocId) fetchSummary(selectedDocId, true);
+  const loadOriginal = async (docId) => {
+    if (originals[docId]) return;
+    setOrigLoading(true);
+    try {
+      const data = await fetchDocText(docId);
+      setOriginals((prev) => ({ ...prev, [docId]: data.text || "" }));
+    } catch {
+      setOriginals((prev) => ({ ...prev, [docId]: "원본 텍스트를 불러오지 못했어요." }));
+    } finally {
+      setOrigLoading(false);
+    }
   };
+
+  const toggleOriginal = () => {
+    const next = !showOriginal;
+    setShowOriginal(next);
+    if (next && selectedDocId) loadOriginal(selectedDocId);
+  };
+
+  const handleSelect = (id) => {
+    fetchSummary(id);
+    if (showOriginal) loadOriginal(id);
+  };
+
+  const hasSummary = selectedDocId && loading !== selectedDocId && summaries[selectedDocId];
 
   return (
     <div style={{ display: "flex", gap: 12, flex: 1, minHeight: 0, overflow: "hidden" }}>
       {/* 왼쪽: 문서 트리 */}
       <div
         style={{
-          width: 200,
+          width: 180,
           flexShrink: 0,
           overflowY: "auto",
           borderRight: `1px solid ${C.line}`,
           paddingRight: 10,
         }}
       >
-        <DocTree
-          docs={docs}
-          folders={folders}
-          selectedId={selectedDocId}
-          onSelect={(id) => fetchSummary(id)}
-        />
+        <DocTree docs={docs} folders={folders} selectedId={selectedDocId} onSelect={handleSelect} />
       </div>
 
-      {/* 오른쪽: 요약 내용 */}
-      <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
+      {/* 오른쪽: 콘텐츠 */}
+      <div
+        style={{
+          flex: 1,
+          minWidth: 0,
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+          overflow: "hidden",
+        }}
+      >
+        {/* 툴바 */}
+        {hasSummary && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+            {cached[selectedDocId] && (
+              <span
+                style={{
+                  fontSize: 11,
+                  color: C.inkSoft,
+                  background: C.paper2,
+                  border: `1px solid ${C.line}`,
+                  borderRadius: 4,
+                  padding: "1px 6px",
+                }}
+              >
+                캐시됨
+              </span>
+            )}
+            <div style={{ marginLeft: "auto", display: "flex", gap: 6 }}>
+              {/* 원본 보기 토글 */}
+              <button
+                onClick={toggleOriginal}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 5,
+                  border: `1px solid ${showOriginal ? C.accent : C.line}`,
+                  background: showOriginal ? C.accentSoft : "transparent",
+                  color: showOriginal ? C.accent : C.inkSoft,
+                  fontSize: 12,
+                  padding: "3px 10px",
+                  borderRadius: 6,
+                  cursor: "pointer",
+                  fontFamily: sans,
+                  fontWeight: showOriginal ? 600 : 400,
+                  transition: "all .15s",
+                }}
+              >
+                <span style={{ fontSize: 13 }}>📄</span>
+                원본 {showOriginal ? "숨기기" : "보기"}
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  fetchSummary(selectedDocId, true);
+                }}
+                style={{
+                  border: `1px solid ${C.line}`,
+                  background: "transparent",
+                  color: C.inkSoft,
+                  fontSize: 12,
+                  padding: "3px 10px",
+                  borderRadius: 6,
+                  cursor: "pointer",
+                  fontFamily: sans,
+                }}
+              >
+                재생성
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 빈 상태 */}
         {!selectedDocId && (
           <div style={{ fontSize: 13, color: C.inkSoft, paddingTop: 8 }}>
             왼쪽에서 문서를 선택하면 요약이 표시됩니다.
           </div>
         )}
+
+        {/* 로딩 */}
         {selectedDocId && loading === selectedDocId && (
           <div
             style={{
@@ -625,51 +756,100 @@ function SummaryPanel({ docs, folders }) {
             {progress || "요약 생성 중…"}
           </div>
         )}
-        {selectedDocId && loading !== selectedDocId && summaries[selectedDocId] && (
-          <>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                flexShrink: 0,
-              }}
-            >
-              {cached[selectedDocId] && (
-                <span
-                  style={{
-                    fontSize: 11,
-                    color: C.inkSoft,
-                    background: C.paper2,
-                    border: `1px solid ${C.line}`,
-                    borderRadius: 4,
-                    padding: "1px 6px",
-                  }}
-                >
-                  캐시됨
-                </span>
-              )}
-              <button
-                onClick={regenerate}
+
+        {/* 분할/단독 뷰 */}
+        {hasSummary && (
+          <div style={{ flex: 1, minHeight: 0, display: "flex", gap: 10, overflow: "hidden" }}>
+            {/* 원본 패널 */}
+            {showOriginal && (
+              <div
                 style={{
+                  flex: 1,
+                  minWidth: 0,
+                  display: "flex",
+                  flexDirection: "column",
+                  overflow: "hidden",
+                  background: C.paper,
+                  borderRadius: "var(--radius-md)",
                   border: `1px solid ${C.line}`,
-                  background: "transparent",
-                  color: C.inkSoft,
-                  fontSize: 11.5,
-                  padding: "2px 10px",
-                  borderRadius: 5,
-                  cursor: "pointer",
-                  fontFamily: sans,
-                  marginLeft: "auto",
                 }}
               >
-                재생성
-              </button>
+                <div
+                  style={{
+                    padding: "8px 12px",
+                    borderBottom: `1px solid ${C.line}`,
+                    fontSize: 11.5,
+                    fontWeight: 700,
+                    color: C.inkSoft,
+                    letterSpacing: "0.06em",
+                    textTransform: "uppercase",
+                    flexShrink: 0,
+                  }}
+                >
+                  원본
+                </div>
+                <div style={{ flex: 1, overflowY: "auto", padding: "12px 14px" }}>
+                  {origLoading && !originals[selectedDocId] ? (
+                    <div style={{ color: C.inkSoft, fontSize: 13 }}>불러오는 중…</div>
+                  ) : (
+                    <pre
+                      style={{
+                        margin: 0,
+                        fontSize: 12.5,
+                        lineHeight: 1.7,
+                        color: C.ink,
+                        fontFamily: "'IBM Plex Sans KR', sans-serif",
+                        whiteSpace: "pre-wrap",
+                        wordBreak: "break-word",
+                      }}
+                    >
+                      {originals[selectedDocId] || ""}
+                    </pre>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* 요약 패널 */}
+            <div
+              style={{
+                flex: 1,
+                minWidth: 0,
+                display: "flex",
+                flexDirection: "column",
+                overflow: "hidden",
+                background: C.paper,
+                borderRadius: "var(--radius-md)",
+                border: `1px solid ${C.line}`,
+              }}
+            >
+              <div
+                style={{
+                  padding: "8px 12px",
+                  borderBottom: `1px solid ${C.line}`,
+                  fontSize: 11.5,
+                  fontWeight: 700,
+                  color: C.inkSoft,
+                  letterSpacing: "0.06em",
+                  textTransform: "uppercase",
+                  flexShrink: 0,
+                }}
+              >
+                요약
+              </div>
+              <div
+                style={{
+                  flex: 1,
+                  overflowY: "auto",
+                  padding: "12px 14px",
+                  fontSize: 13.5,
+                  lineHeight: 1.7,
+                }}
+              >
+                <MdContent>{summaries[selectedDocId]}</MdContent>
+              </div>
             </div>
-            <div style={{ fontSize: 13.5, lineHeight: 1.7, flex: 1 }}>
-              <ReactMarkdown>{summaries[selectedDocId]}</ReactMarkdown>
-            </div>
-          </>
+          </div>
         )}
       </div>
     </div>

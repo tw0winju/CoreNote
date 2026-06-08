@@ -107,6 +107,8 @@ export const postQuiz = (docId, count = 5) =>
     body: JSON.stringify({ docId, count }),
   }).then((r) => r.json());
 
+export const fetchDocText = (docId) => fetch(`/api/docs/${docId}/text`).then((r) => r.json());
+
 export const postSummary = (docId, force = false) =>
   fetch("/api/summary", {
     method: "POST",
