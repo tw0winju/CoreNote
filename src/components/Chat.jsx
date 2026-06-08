@@ -265,6 +265,8 @@ export default function Chat({ chat, docs: docsHook }) {
     attachedImage,
     setAttachedImage,
     cancelAsk,
+    fullContext,
+    setFullContext,
   } = chat;
 
   const { selectedDocs, docs, setSelectedDocs } = docsHook;
@@ -588,14 +590,32 @@ export default function Chat({ chat, docs: docsHook }) {
       {/* ── 입력 영역 ── */}
       <div style={{ flexShrink: 0, paddingTop: 10 }}>
         {selectedDocs.size > 0 && (
-          <div style={{ fontSize: 12.5, color: C.accent, marginBottom: 7 }}>
-            {selectedDocs.size}개 문서 범위로 검색 중 ·{" "}
-            <span
-              style={{ cursor: "pointer", textDecoration: "underline" }}
-              onClick={() => setSelectedDocs(new Set())}
-            >
-              전체 해제
+          <div style={{ fontSize: 12.5, color: C.accent, marginBottom: 7, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <span>
+              {selectedDocs.size}개 문서 범위로 검색 중 ·{" "}
+              <span
+                style={{ cursor: "pointer", textDecoration: "underline" }}
+                onClick={() => setSelectedDocs(new Set())}
+              >
+                전체 해제
+              </span>
             </span>
+            <button
+              onClick={() => setFullContext((v) => !v)}
+              title="선택 문서의 전체 내용을 컨텍스트로 사용"
+              style={{
+                border: `1px solid ${fullContext ? C.accent : C.line}`,
+                background: fullContext ? C.accentSoft : "transparent",
+                color: fullContext ? C.accent : C.inkSoft,
+                fontSize: 11.5,
+                padding: "2px 8px",
+                borderRadius: 6,
+                cursor: "pointer",
+                fontFamily: sans,
+              }}
+            >
+              전체 내용
+            </button>
           </div>
         )}
 

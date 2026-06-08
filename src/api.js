@@ -53,7 +53,7 @@ export const postIndexUrl = (url, folderId = null) =>
   });
 
 // ── 질문 ──────────────────────────────────────────────────────────────────────
-export const postAsk = (question, history, docIds, image = null, signal = null) =>
+export const postAsk = (question, history, docIds, image = null, signal = null, fullContext = false) =>
   fetch("/api/ask", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -62,6 +62,7 @@ export const postAsk = (question, history, docIds, image = null, signal = null) 
       history,
       ...(docIds?.size > 0 && { docIds: [...docIds] }),
       ...(image && { image }),
+      ...(fullContext && { fullContext: true }),
     }),
     ...(signal && { signal }),
   });

@@ -167,13 +167,14 @@ export default function useChat(onMemoryExtracted) {
   const isFavorited = (q, a) => favorites.some((f) => f.q === q && f.a === a);
 
   const [attachedImage, setAttachedImage] = useState(null); // { base64, name, preview }
+  const [fullContext, setFullContext] = useState(false);
   const abortRef = useRef(null);
 
   const cancelAsk = () => {
     abortRef.current?.abort();
   };
 
-  const _doAsk = async (q, history, selectedDocs, image = null) => {
+  const _doAsk = async (q, history, selectedDocs, image = null, fc = false) => {
     const controller = new AbortController();
     abortRef.current = controller;
 
@@ -192,7 +193,7 @@ export default function useChat(onMemoryExtracted) {
 
     let answer = "", sources = [];
     try {
-      const r = await postAsk(q, history, selectedDocs, image?.base64 ?? null, controller.signal);
+      const r = await postAsk(q, history, selectedDocs, image?.base64 ?? null, controller.signal, fc);
       if (!r.ok) {
         const d = await r.json();
         throw new Error(d.error || "질문 처리 실패");
@@ -242,7 +243,7 @@ export default function useChat(onMemoryExtracted) {
       { role: "user", content: cq },
       { role: "assistant", content: ca },
     ]);
-    _doAsk(q, history, selectedDocs, attachedImage);
+    _doAsk(q, history, selectedDocs, attachedImage, fullContext);
   };
 
   const regenerate = (selectedDocs) => {
@@ -293,5 +294,7 @@ export default function useChat(onMemoryExtracted) {
     attachedImage,
     setAttachedImage,
     cancelAsk,
+    fullContext,
+    setFullContext,
   };
 }

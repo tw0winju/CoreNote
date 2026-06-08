@@ -807,7 +807,7 @@ ${text}`;
 
 // ---------- 5) 질문(검색 + 답변, SSE 스트리밍) ----------
 app.post("/api/ask", async (req, res) => {
-  const { question, history = [], docIds, image } = req.body;
+  const { question, history = [], docIds, image, fullContext = false } = req.body;
   if (!question || !question.trim()) return res.status(400).json({ error: "질문을 입력하세요." });
   if (docs.length === 0) return res.status(400).json({ error: "먼저 문서를 추가하세요." });
 
@@ -840,6 +840,115 @@ app.post("/api/ask", async (req, res) => {
       send({ type: "error", error: "먼저 문서를 추가하세요." });
       return res.end();
     }
+
+    // ── 전체 문서 모드 ──────────────────────────────────────────────────────
+    if (fullContext && docIds?.length > 0) {
+      send({ type: "status", message: "전체 문서 내용 불러오는 중…" });
+
+      // 1. 지정 문서의 모든 청크를 인덱스 순으로 수집
+      let allChunks = [];
+      for (const docId of docIds) {
+        const chunks = await table.query().where(`docId = '${docId}'`).toArray();
+        chunks.sort((a, b) => a.index - b.index);
+        allChunks.push(...chunks);
+      }
+
+      if (allChunks.length === 0) {
+        send({ type: "error", error: "선택한 문서에서 내용을 찾지 못했습니다." });
+        return res.end();
+      }
+
+      // 2. BM25 필터링: 하위 20% 제거 (단, 5개 이하면 스킵)
+      if (allChunks.length > 5) {
+        const scores = bm25Scores(question, allChunks);
+        const sorted = [...scores].sort((a, b) => a - b);
+        const threshold = sorted[Math.floor(sorted.length * 0.2)];
+        allChunks = allChunks.filter((_, i) => scores[i] >= threshold);
+      }
+
+      // 3. 겹침 제거: 연속 청크면 앞 OVERLAP_CHARS + "\n\n" 접두어 제거
+      const textParts = allChunks.map((chunk, i) => {
+        if (i === 0) return chunk.text;
+        const prev = allChunks[i - 1];
+        if (chunk.index !== prev.index + 1) return chunk.text;
+        const sepIdx = chunk.text.indexOf("\n\n");
+        if (sepIdx !== -1 && sepIdx <= OVERLAP_CHARS + 2) return chunk.text.slice(sepIdx + 2);
+        return chunk.text;
+      });
+
+      const context = textParts.join("\n\n");
+      const imageBlock = imageText ? `\n\n[첨부 이미지에서 추출한 텍스트]\n${imageText}` : "";
+      const prompt = `아래 [참고자료]에 있는 내용만 근거로 사용자의 질문에 한국어로 답하세요.
+- 자료에 없는 내용은 지어내지 말고 "자료에서 찾을 수 없습니다"라고 답합니다.
+- 답에 사용한 근거는 해당 내용이 나온 문장 끝에 [문서명] 형식으로 표시합니다.
+
+[참고자료]
+${context}${imageBlock}
+
+[질문]
+${question}`;
+
+      const docNames = [...new Set(allChunks.map((c) => docs.find((d) => d.id === c.docId)?.name || c.docName))];
+      send({
+        type: "sources",
+        sources: docNames.map((name, i) => ({
+          n: i + 1,
+          docName: name,
+          index: 0,
+          score: 1,
+          snippet: `전체 내용 (${allChunks.filter((c) => (docs.find((d) => d.id === c.docId)?.name || c.docName) === name).length}개 조각)`,
+        })),
+      });
+
+      const safeHistory = Array.isArray(history) ? history.slice(-20) : [];
+      const memoryBlock = settings.memoryEnabled && memories.length > 0
+        ? "\n\n[기억]\n" + memories.slice(0, 15).map((m) => `- ${m.content}`).join("\n")
+        : "";
+      const ollamaRes = await ollamaFetch("/api/chat", {
+        model: settings.chatModel,
+        messages: [
+          { role: "system", content: settings.systemPrompt + memoryBlock },
+          ...safeHistory,
+          { role: "user", content: prompt },
+        ],
+        stream: true,
+        options: { temperature: 0.2 },
+      });
+
+      if (!ollamaRes.ok) {
+        const b = await ollamaRes.text().catch(() => "");
+        if (ollamaRes.status === 404 || /not found|pull/i.test(b))
+          send({ type: "error", error: `모델(${settings.chatModel})이 없습니다. 'ollama pull ${settings.chatModel}' 을 실행하세요.` });
+        else send({ type: "error", error: "처리 중 오류가 발생했습니다." });
+        return res.end();
+      }
+
+      let inThink = false, tail = "";
+      const processToken = (token) => {
+        if (inThink) { if (token.includes("</think>")) { inThink = false; tail = token.split("</think>").slice(1).join(""); } return; }
+        if (token.includes("<think>")) { inThink = true; const pre = token.split("<think>")[0]; if (pre) send({ type: "token", text: pre }); return; }
+        const combined = tail + token; tail = "";
+        const out = combined.replace(/```(?:\w+\n?)?/g, "");
+        if (out) send({ type: "token", text: out });
+      };
+
+      const reader2 = ollamaRes.body.getReader();
+      const dec2 = new TextDecoder();
+      let lb2 = "";
+      while (true) {
+        const { done, value } = await reader2.read();
+        if (done) break;
+        lb2 += dec2.decode(value, { stream: true });
+        const lines = lb2.split("\n"); lb2 = lines.pop();
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try { const chunk = JSON.parse(line); if (chunk.message?.content) processToken(chunk.message.content); } catch {}
+        }
+      }
+      if (!inThink && tail) { const c = tail.replace(/```(?:\w+\n?)?/g, ""); if (c) send({ type: "token", text: c }); }
+      return res.end();
+    }
+    // ────────────────────────────────────────────────────────────────────────
 
     // F: HyDE — 가상 답변을 임베딩해 검색 정확도 향상
     let queryText = question;
