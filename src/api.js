@@ -100,11 +100,11 @@ export const postQuiz = (docId, count = 5) =>
     body: JSON.stringify({ docId, count }),
   }).then((r) => r.json());
 
-export const postSummary = (docId) =>
+export const postSummary = (docId, force = false) =>
   fetch("/api/summary", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ docId }),
+    body: JSON.stringify({ docId, ...(force && { force: true }) }),
   });
 
 // ── SSE 파서 ──────────────────────────────────────────────────────────────────

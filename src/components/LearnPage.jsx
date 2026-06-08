@@ -539,21 +539,23 @@ function QuizPanel({ docs, folders }) {
 function SummaryPanel({ docs, folders }) {
   const [selectedDocId, setSelectedDocId] = useState(null);
   const [summaries, setSummaries] = useState({});
+  const [cached, setCached] = useState({});
   const [loading, setLoading] = useState(null);
   const [progress, setProgress] = useState("");
 
-  const fetchSummary = async (docId) => {
+  const fetchSummary = async (docId, force = false) => {
     setSelectedDocId(docId);
-    if (summaries[docId]) return;
+    if (!force && summaries[docId]) return;
     setLoading(docId);
     setProgress("");
     try {
-      const r = await postSummary(docId);
+      const r = await postSummary(docId, force);
       if (!r.ok) throw new Error("요약 요청 실패");
       await readSSE(r, {
         progress: (e) => setProgress(e.message),
         done: (e) => {
           setSummaries((prev) => ({ ...prev, [docId]: e.summary || "요약 실패" }));
+          setCached((prev) => ({ ...prev, [docId]: !!e.cached }));
           setProgress("");
         },
       });
@@ -562,6 +564,11 @@ function SummaryPanel({ docs, folders }) {
     } finally {
       setLoading(null);
     }
+  };
+
+  const regenerate = (e) => {
+    e.stopPropagation();
+    if (selectedDocId) fetchSummary(selectedDocId, true);
   };
 
   return (
@@ -580,12 +587,12 @@ function SummaryPanel({ docs, folders }) {
           docs={docs}
           folders={folders}
           selectedId={selectedDocId}
-          onSelect={fetchSummary}
+          onSelect={(id) => fetchSummary(id)}
         />
       </div>
 
       {/* 오른쪽: 요약 내용 */}
-      <div style={{ flex: 1, overflowY: "auto" }}>
+      <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
         {!selectedDocId && (
           <div style={{ fontSize: 13, color: C.inkSoft, paddingTop: 8 }}>
             왼쪽에서 문서를 선택하면 요약이 표시됩니다.
@@ -609,9 +616,41 @@ function SummaryPanel({ docs, folders }) {
           </div>
         )}
         {selectedDocId && loading !== selectedDocId && summaries[selectedDocId] && (
-          <div style={{ fontSize: 13.5, lineHeight: 1.7 }}>
-            <ReactMarkdown>{summaries[selectedDocId]}</ReactMarkdown>
-          </div>
+          <>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                flexShrink: 0,
+              }}
+            >
+              {cached[selectedDocId] && (
+                <span style={{ fontSize: 11, color: C.inkSoft, background: C.paper2, border: `1px solid ${C.line}`, borderRadius: 4, padding: "1px 6px" }}>
+                  캐시됨
+                </span>
+              )}
+              <button
+                onClick={regenerate}
+                style={{
+                  border: `1px solid ${C.line}`,
+                  background: "transparent",
+                  color: C.inkSoft,
+                  fontSize: 11.5,
+                  padding: "2px 10px",
+                  borderRadius: 5,
+                  cursor: "pointer",
+                  fontFamily: sans,
+                  marginLeft: "auto",
+                }}
+              >
+                재생성
+              </button>
+            </div>
+            <div style={{ fontSize: 13.5, lineHeight: 1.7, flex: 1 }}>
+              <ReactMarkdown>{summaries[selectedDocId]}</ReactMarkdown>
+            </div>
+          </>
         )}
       </div>
     </div>

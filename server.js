@@ -34,6 +34,7 @@ const DOCS_PATH = path.join(DATA_DIR, "docs.json");
 const LANCEDB_DIR = path.join(DATA_DIR, "lancedb");
 const OLD_STORE_PATH = path.join(DATA_DIR, "store.json");
 const SETTINGS_PATH = path.join(DATA_DIR, "settings.json");
+const SUMMARIES_PATH = path.join(DATA_DIR, "summaries.json");
 
 app.use(cors());
 app.use(express.json({ limit: "300mb" }));
@@ -88,6 +89,20 @@ let { docs, folders } = loadDocs();
 function saveDocs() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.writeFileSync(DOCS_PATH, JSON.stringify({ docs, folders }));
+}
+
+// ---------- 요약 캐시 ----------
+function loadSummaries() {
+  try {
+    if (fs.existsSync(SUMMARIES_PATH))
+      return JSON.parse(fs.readFileSync(SUMMARIES_PATH, "utf8"));
+  } catch {}
+  return {};
+}
+let summaryCache = loadSummaries();
+function saveSummaryCache() {
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.writeFileSync(SUMMARIES_PATH, JSON.stringify(summaryCache, null, 2));
 }
 
 // ---------- LanceDB ----------
@@ -688,6 +703,10 @@ app.delete("/api/docs/:id", async (req, res) => {
   }
   docs = docs.filter((d) => d.id !== id);
   saveDocs();
+  if (summaryCache[id]) {
+    delete summaryCache[id];
+    saveSummaryCache();
+  }
   res.json({ ok: true });
 });
 
@@ -816,7 +835,7 @@ app.post("/api/quiz", async (req, res) => {
 const SUMMARY_BATCH_CHARS = 22000; // ~11k 토큰 — 32k 컨텍스트에서 안전한 배치 크기
 
 app.post("/api/summary", async (req, res) => {
-  const { docId } = req.body;
+  const { docId, force = false } = req.body;
   if (!docId) return res.status(400).json({ error: "docId가 필요합니다." });
 
   res.setHeader("Content-Type", "text/event-stream");
@@ -825,6 +844,12 @@ app.post("/api/summary", async (req, res) => {
   res.flushHeaders();
 
   const send = (obj) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
+
+  // 캐시 히트
+  if (!force && summaryCache[docId]) {
+    send({ type: "done", summary: summaryCache[docId], cached: true });
+    return res.end();
+  }
 
   try {
     const table = await getTable();
@@ -877,6 +902,8 @@ app.post("/api/summary", async (req, res) => {
       summary = subSummaries.join("\n\n---\n\n");
     }
 
+    summaryCache[docId] = summary;
+    saveSummaryCache();
     send({ type: "done", summary });
     res.end();
   } catch (e) {
