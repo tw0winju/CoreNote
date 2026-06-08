@@ -98,26 +98,28 @@ export default function useChat(onMemoryExtracted) {
           );
       }
       const blob = new Blob([lines.join("\n\n")], { type: "text/plain;charset=utf-8" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `corenote-${ts}.txt`;
-      a.click();
+      const el = document.createElement("a");
+      el.href = URL.createObjectURL(blob);
+      el.download = `corenote-${ts}.txt`;
+      el.click();
       return;
     }
 
-    const htmlBody = conversation
+    const turns = conversation
       .map(
         (item) => `
-      <div class="card">
-        <div class="q"><span class="badge">Q</span>${escHtml(item.q)}</div>
-        ${item.image ? `<img src="${item.image}" class="thumb" alt="첨부 이미지">` : ""}
-        <div class="a"><span class="badge a-badge">A</span><div class="md">${mdToHtml(item.a)}</div></div>
-        ${
-          item.sources?.length > 0
-            ? `<div class="src">출처: ${item.sources.map((s) => `<span class="chip">${escHtml(s.docName)}</span>`).join(" ")}</div>`
-            : ""
-        }
-      </div>`,
+  <div class="turn">
+    <div class="user-row">
+      ${item.image ? `<img src="${item.image}" class="user-img" alt="첨부 이미지">` : ""}
+      <div class="user-bubble">${escHtml(item.q).replace(/\n/g, "<br>")}</div>
+    </div>
+    <div class="asst-bubble">${mdToHtml(item.a)}</div>
+    ${
+      item.sources?.length > 0
+        ? `<div class="sources"><span class="src-label">출처</span>${item.sources.map((s) => `<span class="src-chip">${escHtml(s.docName)}</span>`).join("")}</div>`
+        : ""
+    }
+  </div>`,
       )
       .join("");
 
@@ -127,60 +129,126 @@ export default function useChat(onMemoryExtracted) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>코어노트 대화 기록</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-         background: #f5f5f5; color: #1a1a1a; padding: 16px; font-size: 15px; line-height: 1.7; }
-  h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
-  .meta { color: #666; font-size: 13px; margin-bottom: 20px; }
-  .card { background: #fff; border-radius: 12px; padding: 18px; margin-bottom: 16px;
-          box-shadow: 0 1px 4px rgba(0,0,0,.08); }
-  .badge { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 4px;
-           padding: 1px 6px; margin-right: 8px; vertical-align: middle; flex-shrink: 0; }
-  .q { font-weight: 600; display: flex; align-items: flex-start; gap: 6px;
-       padding-bottom: 12px; border-bottom: 1px solid #eee; margin-bottom: 12px; }
-  .q .badge { background: #e0e7ff; color: #3730a3; margin-top: 3px; }
-  .a { display: flex; align-items: flex-start; gap: 6px; }
-  .a-badge { background: #d1fae5; color: #065f46; margin-top: 3px; }
-  .md { flex: 1; }
-  .md h1,.md h2,.md h3 { margin: 12px 0 6px; font-size: 1em; }
-  .md p { margin-bottom: 8px; }
-  .md ul,.md ol { padding-left: 20px; margin-bottom: 8px; }
-  .md li { margin-bottom: 4px; }
-  .md code { background: #f3f4f6; border-radius: 3px; padding: 1px 5px; font-size: 13px; }
-  .md pre { background: #f3f4f6; border-radius: 6px; padding: 12px; overflow-x: auto;
-            font-size: 13px; margin-bottom: 8px; }
-  .md pre code { background: none; padding: 0; }
-  .md strong { font-weight: 600; }
-  .thumb { max-width: 100%; border-radius: 8px; margin: 8px 0; }
-  .src { margin-top: 10px; font-size: 12px; color: #888; }
-  .chip { display: inline-block; background: #f0f0f0; border-radius: 4px;
-          padding: 1px 7px; margin-right: 4px; }
-  @media print { body { background: #fff; padding: 0; }
-    .card { box-shadow: none; border: 1px solid #ddd; break-inside: avoid; } }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #f5f6fb; --card: #ffffff; --ink: #16182e; --ink-soft: #6b7090;
+    --accent: #5b52d6; --accent-soft: #ede9ff; --line: rgba(16,18,46,.09);
+    --code-bg: #ebecf5; --src-bg: #f0f0f8; --src-color: #6b7090;
+    --shadow: 0 2px 8px rgba(16,18,46,.08);
+  }
   @media (prefers-color-scheme: dark) {
-    body { background: #111; color: #e5e5e5; }
-    .card { background: #1e1e1e; box-shadow: none; }
-    .q { border-color: #333; }
-    .md code,.md pre { background: #2a2a2a; }
-    .chip { background: #2a2a2a; }
-    .src { color: #777; }
+    :root {
+      --bg: #0d0e16; --card: #191b28; --ink: #dfe1f0; --ink-soft: #7a7f9e;
+      --accent: #7b73f5; --accent-soft: #221d48; --line: rgba(255,255,255,.07);
+      --code-bg: #12141e; --src-bg: #12141e; --src-color: #7a7f9e;
+      --shadow: 0 2px 8px rgba(0,0,0,.35);
+    }
+  }
+
+  body {
+    font-family: "IBM Plex Sans KR", -apple-system, sans-serif;
+    background: var(--bg); color: var(--ink);
+    font-size: 15px; line-height: 1.7;
+    padding: 0; margin: 0;
+  }
+
+  .page-header {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--card); border-bottom: 1px solid var(--line);
+    padding: 14px 20px; display: flex; align-items: baseline; gap: 10px;
+    box-shadow: var(--shadow);
+  }
+  .page-header h1 { font-size: 16px; font-weight: 600; }
+  .page-header .meta { font-size: 12px; color: var(--ink-soft); }
+
+  .chat-wrap { max-width: 780px; margin: 0 auto; padding: 20px 16px 40px; display: flex; flex-direction: column; gap: 24px; }
+
+  .turn { display: flex; flex-direction: column; gap: 8px; }
+
+  /* 사용자 버블 */
+  .user-row { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+  .user-img { max-width: min(260px, 70%); border-radius: 10px; object-fit: contain; }
+  .user-bubble {
+    background: var(--accent); color: #fff;
+    border-radius: 16px 4px 16px 16px;
+    padding: 10px 15px; font-size: 14px; line-height: 1.6;
+    max-width: 80%; word-break: break-word;
+    box-shadow: 0 1px 3px rgba(0,0,0,.15);
+  }
+
+  /* 어시스턴트 버블 */
+  .asst-bubble {
+    background: var(--card);
+    border-radius: 4px 16px 16px 16px;
+    padding: 14px 16px; font-size: 14.5px; line-height: 1.75;
+    box-shadow: var(--shadow); word-break: break-word;
+  }
+  .asst-bubble p { margin: 0 0 8px; }
+  .asst-bubble p:last-child { margin-bottom: 0; }
+  .asst-bubble h1 { font-size: 17px; font-weight: 700; margin: 14px 0 6px; }
+  .asst-bubble h2 { font-size: 15px; font-weight: 700; margin: 12px 0 5px; }
+  .asst-bubble h3 { font-size: 14px; font-weight: 600; margin: 10px 0 4px; }
+  .asst-bubble ul, .asst-bubble ol { padding-left: 20px; margin: 4px 0 8px; }
+  .asst-bubble li { margin-bottom: 3px; line-height: 1.65; }
+  .asst-bubble strong { font-weight: 600; }
+  .asst-bubble em { font-style: italic; }
+  .asst-bubble blockquote {
+    border-left: 3px solid var(--accent-soft); padding-left: 12px;
+    margin: 8px 0; color: var(--ink-soft);
+  }
+  .asst-bubble code {
+    background: var(--code-bg); border-radius: 4px;
+    padding: 1px 5px; font-size: 13px; font-family: monospace;
+  }
+  .asst-bubble pre {
+    background: var(--code-bg); border-radius: 8px;
+    padding: 12px 14px; overflow-x: auto; margin: 8px 0;
+  }
+  .asst-bubble pre code { background: none; padding: 0; font-size: 13px; line-height: 1.5; }
+  .asst-bubble table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 13px; }
+  .asst-bubble th { border: 1px solid var(--line); padding: 4px 8px; background: var(--code-bg); font-weight: 600; }
+  .asst-bubble td { border: 1px solid var(--line); padding: 4px 8px; }
+
+  /* 출처 */
+  .sources { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; padding-left: 4px; }
+  .src-label { font-size: 11.5px; color: var(--ink-soft); margin-right: 2px; }
+  .src-chip {
+    font-size: 11.5px; color: var(--src-color);
+    background: var(--src-bg); border-radius: 5px;
+    padding: 2px 8px;
+  }
+
+  @media (max-width: 600px) {
+    .user-bubble { max-width: 90%; }
+    .asst-bubble { font-size: 14px; }
+  }
+  @media print {
+    .page-header { position: static; box-shadow: none; }
+    .turn { break-inside: avoid; }
   }
 </style>
 </head>
 <body>
-<h1>코어노트 대화 기록</h1>
-<p class="meta">${date} · ${conversation.length}개 대화</p>
-${htmlBody}
+<div class="page-header">
+  <h1>코어노트 대화 기록</h1>
+  <span class="meta">${date} · ${conversation.length}개 대화</span>
+</div>
+<div class="chat-wrap">
+${turns}
+</div>
 </body>
 </html>`;
 
     if (format === "html") {
       const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `corenote-${ts}.html`;
-      a.click();
+      const el = document.createElement("a");
+      el.href = URL.createObjectURL(blob);
+      el.download = `corenote-${ts}.html`;
+      el.click();
     } else if (format === "pdf") {
       const win = window.open("", "_blank");
       win.document.write(html);
@@ -198,23 +266,88 @@ ${htmlBody}
   }
 
   function mdToHtml(md) {
-    return md
+    // 코드 블록을 먼저 보호 (플레이스홀더로 치환)
+    const BLOCK = "CODEBLOCK";
+    const blocks = [];
+    let s = md.replace(/```[\w]*\n?([\s\S]*?)```/gm, (_, code) => {
+      blocks.push(`<pre><code>${escHtml(code.trim())}</code></pre>`);
+      return `[[${BLOCK}${blocks.length - 1}]]`;
+    });
+
+    // HTML 이스케이프
+    s = s
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
-      .replace(/```[\w]*\n?([\s\S]*?)```/g, (_, c) => `<pre><code>${c.trim()}</code></pre>`)
-      .replace(/`([^`]+)`/g, "<code>$1</code>")
-      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-      .replace(/\*(.+?)\*/g, "<em>$1</em>")
-      .replace(/^### (.+)$/gm, "<h3>$1</h3>")
-      .replace(/^## (.+)$/gm, "<h2>$1</h2>")
-      .replace(/^# (.+)$/gm, "<h1>$1</h1>")
-      .replace(/^[-*] (.+)$/gm, "<li>$1</li>")
-      .replace(/(<li>[\s\S]*?<\/li>)/g, "<ul>$1</ul>")
-      .replace(/\n{2,}/g, "</p><p>")
-      .replace(/\n/g, "<br>")
-      .replace(/^(?!<[hup])(.+)/, "<p>$1")
-      .replace(/([^>])$/, "$1</p>");
+      .replace(/"/g, "&quot;");
+
+    // 인라인 코드
+    s = s.replace(/`([^`\n]+)`/g, "<code>$1</code>");
+    // 굵게/기울임
+    s = s.replace(/\*\*\*(.+?)\*\*\*/g, "<strong><em>$1</em></strong>");
+    s = s.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    s = s.replace(/\*([^*\n]+)\*/g, "<em>$1</em>");
+
+    // 줄 단위 블록 처리
+    const lines = s.split("\n");
+    const out = [];
+    let listBuf = [];
+    let listTag = "";
+
+    const flush = () => {
+      if (listBuf.length) {
+        out.push(`<${listTag}>${listBuf.join("")}</${listTag}>`);
+        listBuf = [];
+        listTag = "";
+      }
+    };
+
+    for (const line of lines) {
+      const h3 = line.match(/^### (.+)/);
+      const h2 = line.match(/^## (.+)/);
+      const h1 = line.match(/^# (.+)/);
+      const ul = line.match(/^[-*] (.+)/);
+      const ol = line.match(/^\d+\. (.+)/);
+      const bq = line.match(/^> (.+)/);
+
+      if (h3) {
+        flush();
+        out.push(`<h3>${h3[1]}</h3>`);
+      } else if (h2) {
+        flush();
+        out.push(`<h2>${h2[1]}</h2>`);
+      } else if (h1) {
+        flush();
+        out.push(`<h1>${h1[1]}</h1>`);
+      } else if (ul) {
+        if (listTag !== "ul") {
+          flush();
+          listTag = "ul";
+        }
+        listBuf.push(`<li>${ul[1]}</li>`);
+      } else if (ol) {
+        if (listTag !== "ol") {
+          flush();
+          listTag = "ol";
+        }
+        listBuf.push(`<li>${ol[1]}</li>`);
+      } else if (bq) {
+        flush();
+        out.push(`<blockquote>${bq[1]}</blockquote>`);
+      } else if (line.trim() === "") {
+        flush();
+      } else {
+        flush();
+        out.push(`<p>${line}</p>`);
+      }
+    }
+    flush();
+
+    let result = out.join("");
+    blocks.forEach((b, i) => {
+      result = result.replace(`[[${BLOCK}${i}]]`, b);
+    });
+    return result;
   }
 
   const clearConversation = () => {
