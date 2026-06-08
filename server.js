@@ -14,6 +14,8 @@ import {
   memoryExtractPrompt,
   quizPrompt,
   summaryPrompt,
+  batchSummaryPrompt,
+  mergeSummaryPrompt,
   ragPrompt,
   ragFullContextPrompt,
 } from "./prompts.js";
@@ -274,6 +276,46 @@ async function ollamaFetch(pathname, body) {
   return res;
 }
 
+// stream:false는 Ollama가 전체 생성 후 헤더를 보내 undici headersTimeout에 걸림.
+// stream:true로 호출해 토큰을 즉시 수신하고 누적 반환한다.
+// think:false — qwen3 계열의 불필요한 <think> 토큰 생성 방지 (속도 향상).
+async function ollamaGenerate(messages, options = {}) {
+  const res = await ollamaFetch("/api/chat", {
+    model: settings.chatModel,
+    messages,
+    stream: true,
+    think: false,
+    options,
+  });
+  if (!res.ok) {
+    const b = await res.text().catch(() => "");
+    if (res.status === 404 || /not found|pull/i.test(b)) throw new Error("CHAT_MODEL_MISSING");
+    throw new Error(`OLLAMA_HTTP_${res.status}`);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "", content = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split("\n");
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const obj = JSON.parse(line);
+          if (obj.message?.content) content += obj.message.content;
+        } catch {}
+      }
+    }
+  } finally {
+    reader.cancel().catch(() => {});
+  }
+  return content.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+}
+
 async function embed(input) {
   const res = await ollamaFetch("/api/embed", { model: settings.embedModel, input });
   if (!res.ok) {
@@ -362,16 +404,9 @@ async function llmRerank(question, candidates) {
   const listing = candidates.map((c, i) => `[${i + 1}] ${c.text.slice(0, 300)}`).join("\n\n");
   const prompt = rerankPrompt(question, listing);
   try {
-    const res = await ollamaFetch("/api/chat", {
-      model: settings.chatModel,
-      messages: [{ role: "user", content: prompt }],
-      stream: false,
-      options: { temperature: 0 },
-    });
-    if (!res.ok) return null;
-    const raw = ((await res.json()).message?.content || "").replace(
-      /<think>[\s\S]*?<\/think>/g,
-      "",
+    const raw = await ollamaGenerate(
+      [{ role: "user", content: prompt }],
+      { temperature: 0 },
     );
     const order = raw
       .match(/\d+/g)
@@ -719,17 +754,10 @@ app.post("/api/memories/extract", async (req, res) => {
   try {
     const prompt = memoryExtractPrompt(q, a);
 
-    const r = await ollamaFetch("/api/chat", {
-      model: settings.chatModel,
-      messages: [{ role: "user", content: prompt }],
-      stream: false,
-      options: { temperature: 0.1 },
-    });
-    if (!r.ok) return res.json({ extracted: [] });
-
-    const raw = (await r.json()).message?.content || "";
-    // <think> 블록 제거 후 JSON 추출
-    const cleaned = raw.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+    const cleaned = await ollamaGenerate(
+      [{ role: "user", content: prompt }],
+      { temperature: 0.1 },
+    );
     const match = cleaned.match(/\[[\s\S]*\]/);
     if (!match) return res.json({ extracted: [] });
 
@@ -769,15 +797,10 @@ app.post("/api/quiz", async (req, res) => {
       .join("\n\n")
       .slice(0, 3000);
     const prompt = quizPrompt(count, text);
-    const r = await ollamaFetch("/api/chat", {
-      model: settings.chatModel,
-      messages: [{ role: "user", content: prompt }],
-      stream: false,
-      options: { temperature: 0.3 },
-    });
-    if (!r.ok) return res.status(502).json({ error: "퀴즈 생성 실패" });
-    const raw = (await r.json()).message?.content || "";
-    const cleaned = raw.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+    const cleaned = await ollamaGenerate(
+      [{ role: "user", content: prompt }],
+      { temperature: 0.3 },
+    );
     const match = cleaned.match(/\[[\s\S]*\]/);
     if (!match) return res.status(502).json({ error: "퀴즈 파싱 실패" });
     const questions = JSON.parse(match[0])
@@ -789,15 +812,26 @@ app.post("/api/quiz", async (req, res) => {
   }
 });
 
-// ---------- 문서 요약 ----------
+// ---------- 문서 요약 (SSE, 다중패스) ----------
+const SUMMARY_BATCH_CHARS = 22000; // ~11k 토큰 — 32k 컨텍스트에서 안전한 배치 크기
+
 app.post("/api/summary", async (req, res) => {
   const { docId } = req.body;
   if (!docId) return res.status(400).json({ error: "docId가 필요합니다." });
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
+  const send = (obj) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
+
   try {
     const table = await getTable();
-    if (!table) return res.status(404).json({ error: "문서를 찾을 수 없어요." });
+    if (!table) { send({ type: "error", error: "문서를 찾을 수 없어요." }); return res.end(); }
+
     const chunks = await table.query().where(`docId = '${docId}'`).toArray();
-    if (!chunks.length) return res.status(404).json({ error: "문서를 찾을 수 없어요." });
+    if (!chunks.length) { send({ type: "error", error: "문서를 찾을 수 없어요." }); return res.end(); }
     chunks.sort((a, b) => a.index - b.index);
 
     // 인접 청크 overlap 제거
@@ -809,21 +843,45 @@ app.post("/api/summary", async (req, res) => {
       if (sepIdx !== -1 && sepIdx <= OVERLAP_CHARS + 2) return chunk.text.slice(sepIdx + 2);
       return chunk.text;
     });
-    const text = textParts.join("\n\n").slice(0, 16000);
 
-    const prompt = summaryPrompt(text);
-    const r = await ollamaFetch("/api/chat", {
-      model: settings.chatModel,
-      messages: [{ role: "user", content: prompt }],
-      stream: false,
-      options: { temperature: 0.2 },
-    });
-    if (!r.ok) return res.status(502).json({ error: "요약 생성 실패" });
-    const raw = (await r.json()).message?.content || "";
-    const summary = raw.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
-    res.json({ summary });
+    // 배치 분할
+    const batches = [];
+    let cur = [], curLen = 0;
+    for (const part of textParts) {
+      if (curLen + part.length > SUMMARY_BATCH_CHARS && cur.length > 0) {
+        batches.push(cur.join("\n\n"));
+        cur = [part];
+        curLen = part.length;
+      } else {
+        cur.push(part);
+        curLen += part.length;
+      }
+    }
+    if (cur.length > 0) batches.push(cur.join("\n\n"));
+
+    const callLLM = (prompt) =>
+      ollamaGenerate([{ role: "user", content: prompt }], { temperature: 0.2 });
+
+    let summary;
+    if (batches.length === 1) {
+      send({ type: "progress", message: "요약 생성 중…" });
+      summary = await callLLM(summaryPrompt(batches[0]));
+    } else {
+      const subSummaries = [];
+      for (let i = 0; i < batches.length; i++) {
+        send({ type: "progress", message: `내용 분석 중… (${i + 1}/${batches.length} 파트)` });
+        const sub = await callLLM(batchSummaryPrompt(i + 1, batches.length, batches[i]));
+        subSummaries.push(sub);
+      }
+      // 통합 LLM 호출 생략 — 각 배치 요약을 그대로 이어붙임 (정보 손실 방지)
+      summary = subSummaries.join("\n\n---\n\n");
+    }
+
+    send({ type: "done", summary });
+    res.end();
   } catch (e) {
-    res.status(502).json({ error: e.message || "요약 생성 중 오류" });
+    send({ type: "error", error: e.message || "요약 생성 중 오류" });
+    res.end();
   }
 });
 
@@ -1003,19 +1061,11 @@ app.post("/api/ask", async (req, res) => {
     let queryText = question;
     if (settings.hydeEnabled) {
       try {
-        const hydeRes = await ollamaFetch("/api/chat", {
-          model: settings.chatModel,
-          messages: [
-            {
-              role: "system",
-              content: HYDE_SYSTEM_PROMPT,
-            },
-            { role: "user", content: question },
-          ],
-          stream: false,
-          options: { temperature: 0.5 },
-        });
-        if (hydeRes.ok) queryText = (await hydeRes.json()).message?.content || question;
+        const hydeText = await ollamaGenerate(
+          [{ role: "system", content: HYDE_SYSTEM_PROMPT }, { role: "user", content: question }],
+          { temperature: 0.5 },
+        );
+        if (hydeText) queryText = hydeText;
       } catch {}
     }
 

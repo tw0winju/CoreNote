@@ -1,7 +1,7 @@
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { C, sans, serif } from "../theme";
-import { postQuiz, postSummary } from "../api";
+import { postQuiz, postSummary, readSSE } from "../api";
 
 function StatCard({ icon, value, label }) {
   return (
@@ -540,14 +540,23 @@ function SummaryPanel({ docs, folders }) {
   const [selectedDocId, setSelectedDocId] = useState(null);
   const [summaries, setSummaries] = useState({});
   const [loading, setLoading] = useState(null);
+  const [progress, setProgress] = useState("");
 
   const fetchSummary = async (docId) => {
     setSelectedDocId(docId);
     if (summaries[docId]) return;
     setLoading(docId);
+    setProgress("");
     try {
-      const data = await postSummary(docId);
-      setSummaries((prev) => ({ ...prev, [docId]: data.summary || data.error || "요약 실패" }));
+      const r = await postSummary(docId);
+      if (!r.ok) throw new Error("요약 요청 실패");
+      await readSSE(r, {
+        progress: (e) => setProgress(e.message),
+        done: (e) => {
+          setSummaries((prev) => ({ ...prev, [docId]: e.summary || "요약 실패" }));
+          setProgress("");
+        },
+      });
     } catch {
       setSummaries((prev) => ({ ...prev, [docId]: "요약 생성 중 오류가 발생했어요." }));
     } finally {
@@ -596,7 +605,7 @@ function SummaryPanel({ docs, folders }) {
                 flexShrink: 0,
               }}
             />
-            요약 생성 중…
+            {progress || "요약 생성 중…"}
           </div>
         )}
         {selectedDocId && loading !== selectedDocId && summaries[selectedDocId] && (

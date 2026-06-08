@@ -105,7 +105,7 @@ export const postSummary = (docId) =>
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ docId }),
-  }).then((r) => r.json());
+  });
 
 // ── SSE 파서 ──────────────────────────────────────────────────────────────────
 // error 이벤트는 자동으로 throw. 나머지는 handlers[type](event)로 디스패치.
