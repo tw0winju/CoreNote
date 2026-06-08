@@ -22,6 +22,129 @@ function StatCard({ icon, value, label }) {
   );
 }
 
+// ── 공용 디렉터리 트리 ────────────────────────────────────────────────────────
+
+function DocItem({ doc, selected, onSelect, indent = false }) {
+  return (
+    <div
+      onClick={() => onSelect(doc.id)}
+      title={doc.name}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 5,
+        padding: `4px 8px 4px ${indent ? 20 : 8}px`,
+        borderRadius: 6,
+        cursor: "pointer",
+        background: selected ? C.accentSoft : "transparent",
+        color: selected ? C.accent : C.ink,
+        fontSize: 12.5,
+        fontWeight: selected ? 600 : 400,
+        transition: "background 0.12s",
+      }}
+    >
+      <span style={{ fontSize: 11, flexShrink: 0, opacity: 0.6 }}>📄</span>
+      <span
+        style={{
+          flex: 1,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {doc.name}
+      </span>
+    </div>
+  );
+}
+
+function DocTree({ docs, folders, selectedId, onSelect }) {
+  const [openFolders, setOpenFolders] = useState(
+    () => new Set(folders.map((f) => f.id)),
+  );
+
+  const toggle = (id) =>
+    setOpenFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const rootDocs = docs.filter((d) => !d.folderId);
+  const visibleFolders = folders.filter((f) => docs.some((d) => d.folderId === f.id));
+
+  if (docs.length === 0) {
+    return (
+      <div style={{ fontSize: 12.5, color: C.inkSoft, padding: "8px 4px" }}>
+        색인된 문서가 없어요.
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+      {visibleFolders.map((folder) => {
+        const folderDocs = docs.filter((d) => d.folderId === folder.id);
+        const isOpen = openFolders.has(folder.id);
+        return (
+          <div key={folder.id}>
+            <div
+              onClick={() => toggle(folder.id)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+                padding: "4px 8px",
+                cursor: "pointer",
+                borderRadius: 6,
+                fontSize: 12.5,
+                fontWeight: 500,
+                color: C.inkSoft,
+                userSelect: "none",
+              }}
+            >
+              <span style={{ fontSize: 9, width: 10, flexShrink: 0 }}>{isOpen ? "▼" : "▶"}</span>
+              <span style={{ fontSize: 12, flexShrink: 0 }}>📁</span>
+              <span
+                style={{
+                  flex: 1,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {folder.name}
+              </span>
+              <span style={{ fontSize: 11, flexShrink: 0 }}>{folderDocs.length}</span>
+            </div>
+            {isOpen &&
+              folderDocs.map((doc) => (
+                <DocItem
+                  key={doc.id}
+                  doc={doc}
+                  selected={selectedId === doc.id}
+                  onSelect={onSelect}
+                  indent
+                />
+              ))}
+          </div>
+        );
+      })}
+      {rootDocs.map((doc) => (
+        <DocItem
+          key={doc.id}
+          doc={doc}
+          selected={selectedId === doc.id}
+          onSelect={onSelect}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ── 즐겨찾기 ─────────────────────────────────────────────────────────────────
+
 function FavoritesPanel({ favorites, onRemove }) {
   const [expandedId, setExpandedId] = useState(null);
 
@@ -123,7 +246,7 @@ function FavoritesPanel({ favorites, onRemove }) {
                   overflowY: "auto",
                 }}
               >
-                <ReactMarkdown >{f.a}</ReactMarkdown>
+                <ReactMarkdown>{f.a}</ReactMarkdown>
               </div>
             )}
           </div>
@@ -133,7 +256,9 @@ function FavoritesPanel({ favorites, onRemove }) {
   );
 }
 
-function QuizPanel({ docs }) {
+// ── 퀴즈 ─────────────────────────────────────────────────────────────────────
+
+function QuizPanel({ docs, folders }) {
   const [selectedDocId, setSelectedDocId] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -181,61 +306,56 @@ function QuizPanel({ docs }) {
   const q = questions[current];
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ display: "flex", gap: 8 }}>
-        <select
-          value={selectedDocId}
-          onChange={(e) => setSelectedDocId(e.target.value)}
-          style={{
-            flex: 1,
-            padding: "7px 10px",
-            borderRadius: 8,
-            border: `1px solid ${C.line}`,
-            fontFamily: sans,
-            fontSize: 13,
-            background: C.card,
-            color: C.ink,
-          }}
-        >
-          <option value="">문서 선택...</option>
-          {docs.map((d) => (
-            <option key={d.id} value={d.id}>{d.name}</option>
-          ))}
-        </select>
-        <button
-          onClick={generate}
-          disabled={!selectedDocId || loading}
-          style={{
-            border: "none",
-            background: selectedDocId && !loading ? C.ink : C.line,
-            color: selectedDocId && !loading ? C.paper : C.inkSoft,
-            padding: "7px 16px",
-            borderRadius: 8,
-            fontSize: 13,
-            fontFamily: sans,
-            cursor: selectedDocId && !loading ? "pointer" : "default",
-            flexShrink: 0,
-          }}
-        >
-          {loading ? "생성 중…" : "퀴즈 생성"}
-        </button>
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, height: "100%" }}>
+      {/* 문서 선택 트리 */}
+      <div
+        style={{
+          border: `1px solid ${C.line}`,
+          borderRadius: 8,
+          padding: 4,
+          maxHeight: 160,
+          overflowY: "auto",
+          flexShrink: 0,
+          background: C.paper,
+        }}
+      >
+        <DocTree
+          docs={docs}
+          folders={folders}
+          selectedId={selectedDocId}
+          onSelect={(id) => { setSelectedDocId(id); setQuestions([]); setDone(false); setError(""); }}
+        />
       </div>
 
+      <button
+        onClick={generate}
+        disabled={!selectedDocId || loading}
+        style={{
+          border: "none",
+          background: selectedDocId && !loading ? C.ink : C.line,
+          color: selectedDocId && !loading ? C.paper : C.inkSoft,
+          padding: "7px 16px",
+          borderRadius: 8,
+          fontSize: 13,
+          fontFamily: sans,
+          cursor: selectedDocId && !loading ? "pointer" : "default",
+          flexShrink: 0,
+        }}
+      >
+        {loading ? "생성 중…" : "퀴즈 생성"}
+      </button>
+
       {error && (
-        <div style={{ fontSize: 13, color: "#e74c3c", padding: "8px 12px", background: "#fdf2f2", borderRadius: 8 }}>
+        <div style={{ fontSize: 13, color: "#e74c3c", padding: "8px 12px", background: "#fdf2f2", borderRadius: 8, flexShrink: 0 }}>
           {error}
         </div>
       )}
 
       {questions.length > 0 && !done && q && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, overflowY: "auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontSize: 12, color: C.inkSoft }}>
-              {current + 1} / {questions.length}
-            </span>
-            <span style={{ fontSize: 12, color: C.inkSoft }}>
-              맞춤: {score.correct} / {score.total}
-            </span>
+            <span style={{ fontSize: 12, color: C.inkSoft }}>{current + 1} / {questions.length}</span>
+            <span style={{ fontSize: 12, color: C.inkSoft }}>맞춤: {score.correct} / {score.total}</span>
           </div>
           <div
             style={{
@@ -414,17 +534,16 @@ function QuizPanel({ docs }) {
   );
 }
 
-function SummaryPanel({ docs }) {
+// ── 요약 ─────────────────────────────────────────────────────────────────────
+
+function SummaryPanel({ docs, folders }) {
   const [selectedDocId, setSelectedDocId] = useState(null);
   const [summaries, setSummaries] = useState({});
   const [loading, setLoading] = useState(null);
 
   const fetchSummary = async (docId) => {
-    if (summaries[docId]) {
-      setSelectedDocId(docId);
-      return;
-    }
     setSelectedDocId(docId);
+    if (summaries[docId]) return;
     setLoading(docId);
     try {
       const data = await postSummary(docId);
@@ -436,77 +555,65 @@ function SummaryPanel({ docs }) {
     }
   };
 
-  if (docs.length === 0) {
-    return (
-      <div style={{ fontSize: 13, color: C.inkSoft, padding: "12px 0" }}>
-        색인된 문서가 없어요.
-      </div>
-    );
-  }
-
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-        {docs.map((d) => (
-          <button
-            key={d.id}
-            onClick={() => fetchSummary(d.id)}
-            style={{
-              border: `1px solid ${selectedDocId === d.id ? C.accent : C.line}`,
-              background: selectedDocId === d.id ? C.accentSoft : "transparent",
-              color: selectedDocId === d.id ? C.accent : C.inkSoft,
-              padding: "5px 12px",
-              borderRadius: 20,
-              fontSize: 12.5,
-              fontFamily: sans,
-              cursor: "pointer",
-              fontWeight: selectedDocId === d.id ? 600 : 400,
-            }}
-          >
-            {d.name}
-          </button>
-        ))}
+    <div style={{ display: "flex", gap: 12, flex: 1, minHeight: 0, overflow: "hidden" }}>
+      {/* 왼쪽: 문서 트리 */}
+      <div
+        style={{
+          width: 200,
+          flexShrink: 0,
+          overflowY: "auto",
+          borderRight: `1px solid ${C.line}`,
+          paddingRight: 10,
+        }}
+      >
+        <DocTree
+          docs={docs}
+          folders={folders}
+          selectedId={selectedDocId}
+          onSelect={fetchSummary}
+        />
       </div>
 
-      {selectedDocId && (
-        <div
-          style={{
-            background: C.card,
-            border: `1px solid ${C.line}`,
-            borderRadius: 12,
-            padding: "14px 16px",
-            fontSize: 13.5,
-            lineHeight: 1.7,
-          }}
-        >
-          {loading === selectedDocId ? (
-            <div style={{ color: C.inkSoft, display: "flex", alignItems: "center", gap: 8 }}>
-              <span
-                className="spin"
-                style={{
-                  width: 16,
-                  height: 16,
-                  border: `2px solid ${C.accentSoft}`,
-                  borderTopColor: C.accent,
-                  borderRadius: "50%",
-                  display: "inline-block",
-                  flexShrink: 0,
-                }}
-              />
-              요약 생성 중…
-            </div>
-          ) : (
-            <ReactMarkdown >{summaries[selectedDocId] || ""}</ReactMarkdown>
-          )}
-        </div>
-      )}
+      {/* 오른쪽: 요약 내용 */}
+      <div style={{ flex: 1, overflowY: "auto" }}>
+        {!selectedDocId && (
+          <div style={{ fontSize: 13, color: C.inkSoft, paddingTop: 8 }}>
+            왼쪽에서 문서를 선택하면 요약이 표시됩니다.
+          </div>
+        )}
+        {selectedDocId && loading === selectedDocId && (
+          <div style={{ color: C.inkSoft, display: "flex", alignItems: "center", gap: 8, paddingTop: 8 }}>
+            <span
+              className="spin"
+              style={{
+                width: 16,
+                height: 16,
+                border: `2px solid ${C.accentSoft}`,
+                borderTopColor: C.accent,
+                borderRadius: "50%",
+                display: "inline-block",
+                flexShrink: 0,
+              }}
+            />
+            요약 생성 중…
+          </div>
+        )}
+        {selectedDocId && loading !== selectedDocId && summaries[selectedDocId] && (
+          <div style={{ fontSize: 13.5, lineHeight: 1.7 }}>
+            <ReactMarkdown>{summaries[selectedDocId]}</ReactMarkdown>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
+// ── LearnPage ─────────────────────────────────────────────────────────────────
+
 export default function LearnPage({ chat, docs: docsHook, memory }) {
   const { favorites, removeFavorite, sessions, conversation } = chat;
-  const { docs } = docsHook;
+  const { docs, folders } = docsHook;
   const { memories } = memory;
 
   const totalQuestions =
@@ -580,7 +687,7 @@ export default function LearnPage({ chat, docs: docsHook, memory }) {
             🎯 퀴즈
           </div>
           <div style={{ flex: 1, overflowY: "auto" }}>
-            <QuizPanel docs={docs} />
+            <QuizPanel docs={docs} folders={folders} />
           </div>
         </div>
       </div>
@@ -589,16 +696,19 @@ export default function LearnPage({ chat, docs: docsHook, memory }) {
       <div
         style={{
           flexShrink: 0,
+          height: 300,
           background: C.card,
           border: `1px solid ${C.line}`,
           borderRadius: 14,
           padding: "14px 18px",
+          display: "flex",
+          flexDirection: "column",
         }}
       >
-        <div style={{ fontFamily: serif, fontSize: 15, fontWeight: 700, marginBottom: 10 }}>
+        <div style={{ fontFamily: serif, fontSize: 15, fontWeight: 700, marginBottom: 10, flexShrink: 0 }}>
           📄 문서 요약
         </div>
-        <SummaryPanel docs={docs} />
+        <SummaryPanel docs={docs} folders={folders} />
       </div>
     </div>
   );
