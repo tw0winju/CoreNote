@@ -641,15 +641,15 @@ function SummaryPanel({ docs, folders }) {
 // ── LearnPage ─────────────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: "favorites", label: "★ 즐겨찾기" },
+  { id: "summary",   label: "📄 요약" },
   { id: "quiz",      label: "🎯 퀴즈" },
-  { id: "summary",   label: "📄 문서 요약" },
+  { id: "favorites", label: "★ 즐겨찾기" },
 ];
 
 export default function LearnPage({ chat, docs: docsHook }) {
   const { favorites, removeFavorite } = chat;
   const { docs, folders } = docsHook;
-  const [activeTab, setActiveTab] = useState("quiz");
+  const [activeTab, setActiveTab] = useState("summary");
 
   return (
     <div
@@ -662,15 +662,17 @@ export default function LearnPage({ chat, docs: docsHook }) {
         gap: 0,
       }}
     >
-      {/* 탭 헤더 */}
+      {/* 탭 헤더 — pill 스타일 */}
       <div
         style={{
           display: "flex",
           gap: 4,
-          borderBottom: `1px solid ${C.line}`,
           flexShrink: 0,
-          paddingBottom: 0,
           marginBottom: 16,
+          background: C.paper2,
+          borderRadius: 10,
+          padding: 4,
+          alignSelf: "flex-start",
         }}
       >
         {TABS.map((tab) => {
@@ -681,28 +683,31 @@ export default function LearnPage({ chat, docs: docsHook }) {
               onClick={() => setActiveTab(tab.id)}
               style={{
                 border: "none",
-                borderBottom: active ? `2px solid ${C.accent}` : "2px solid transparent",
-                background: "transparent",
-                color: active ? C.accent : C.inkSoft,
+                background: active ? C.card : "transparent",
+                color: active ? C.ink : C.inkSoft,
                 fontFamily: sans,
-                fontSize: 13.5,
+                fontSize: 13,
                 fontWeight: active ? 600 : 400,
-                padding: "8px 16px",
+                padding: "6px 16px",
+                borderRadius: 7,
                 cursor: "pointer",
-                marginBottom: -1,
-                transition: "color 0.12s",
+                transition: "all .15s",
+                boxShadow: active ? "var(--shadow-xs)" : "none",
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
               }}
             >
               {tab.label}
               {tab.id === "favorites" && favorites.length > 0 && (
                 <span
                   style={{
-                    marginLeft: 5,
-                    fontSize: 11,
-                    background: active ? C.accentSoft : C.paper2,
+                    fontSize: 10.5,
+                    background: active ? C.accentSoft : C.line,
                     color: active ? C.accent : C.inkSoft,
-                    borderRadius: 10,
+                    borderRadius: 99,
                     padding: "1px 6px",
+                    fontWeight: 600,
                   }}
                 >
                   {favorites.length}

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { C, sans } from "../theme";
+import { C, sans, shadow } from "../theme";
 
-// 출처 [N] 인용 번호 클릭 가능하게 변환
+// ── 인용 번호 클릭 ────────────────────────────────────────────────────────────
 function processCitations(children, onCitationClick) {
   if (!onCitationClick) return children;
   return (Array.isArray(children) ? children : [children]).map((child, ci) => {
@@ -15,10 +15,7 @@ function processCitations(children, onCitationClick) {
           return (
             <sup
               key={`${ci}-${i}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                onCitationClick(Number(m[1]));
-              }}
+              onClick={(e) => { e.stopPropagation(); onCitationClick(Number(m[1])); }}
               title={`출처 ${m[1]} 보기`}
               style={{ color: C.accent, fontWeight: 700, cursor: "pointer", userSelect: "none" }}
             >
@@ -35,131 +32,55 @@ function processCitations(children, onCitationClick) {
 
 function highlight(text, query) {
   if (!query || !text) return text;
-  const words = query
-    .trim()
-    .split(/\s+/)
-    .filter((w) => w.length > 1);
+  const words = query.trim().split(/\s+/).filter((w) => w.length > 1);
   if (!words.length) return text;
   const escaped = words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
   const pattern = new RegExp(`(${escaped.join("|")})`, "gi");
   return text.split(pattern).map((part, i) =>
     i % 2 === 1 ? (
-      <mark key={i} style={{ background: "#fff3cd", borderRadius: 2, padding: "0 1px" }}>
+      <mark key={i} style={{ background: C.accentSoft, color: C.accent, borderRadius: 2, padding: "0 1px" }}>
         {part}
       </mark>
-    ) : (
-      part
-    ),
+    ) : part,
   );
 }
 
 const mdComponents = (onCitationClick) => ({
-  p: ({ children }) => (
-    <p style={{ margin: "0 0 8px", lineHeight: 1.75 }}>
-      {processCitations(children, onCitationClick)}
-    </p>
-  ),
-  li: ({ children }) => (
-    <li style={{ margin: "2px 0", lineHeight: 1.6 }}>
-      {processCitations(children, onCitationClick)}
-    </li>
-  ),
+  p:  ({ children }) => <p style={{ margin: "0 0 8px", lineHeight: 1.75 }}>{processCitations(children, onCitationClick)}</p>,
+  li: ({ children }) => <li style={{ margin: "2px 0", lineHeight: 1.65 }}>{processCitations(children, onCitationClick)}</li>,
   ul: ({ children }) => <ul style={{ paddingLeft: 20, margin: "4px 0 8px" }}>{children}</ul>,
   ol: ({ children }) => <ol style={{ paddingLeft: 20, margin: "4px 0 8px" }}>{children}</ol>,
-  h1: ({ children }) => (
-    <h1 style={{ fontSize: 17, fontWeight: 700, margin: "14px 0 6px" }}>{children}</h1>
-  ),
-  h2: ({ children }) => (
-    <h2 style={{ fontSize: 15, fontWeight: 700, margin: "12px 0 5px" }}>{children}</h2>
-  ),
-  h3: ({ children }) => (
-    <h3 style={{ fontSize: 14, fontWeight: 600, margin: "10px 0 4px" }}>{children}</h3>
-  ),
+  h1: ({ children }) => <h1 style={{ fontSize: 17, fontWeight: 700, margin: "14px 0 6px" }}>{children}</h1>,
+  h2: ({ children }) => <h2 style={{ fontSize: 15, fontWeight: 700, margin: "12px 0 5px" }}>{children}</h2>,
+  h3: ({ children }) => <h3 style={{ fontSize: 14, fontWeight: 600, margin: "10px 0 4px" }}>{children}</h3>,
   blockquote: ({ children }) => (
-    <blockquote
-      style={{
-        borderLeft: `3px solid ${C.accentSoft}`,
-        paddingLeft: 12,
-        margin: "8px 0",
-        color: C.inkSoft,
-      }}
-    >
+    <blockquote style={{ borderLeft: `3px solid ${C.accentSoft}`, paddingLeft: 12, margin: "8px 0", color: C.inkSoft }}>
       {children}
     </blockquote>
   ),
   code: ({ inline, children }) =>
     inline ? (
-      <code
-        style={{
-          background: C.paper2,
-          padding: "1px 5px",
-          borderRadius: 3,
-          fontSize: "0.88em",
-          fontFamily: "monospace",
-        }}
-      >
+      <code style={{ background: C.paper2, padding: "1px 5px", borderRadius: 4, fontSize: "0.88em", fontFamily: "monospace" }}>
         {children}
       </code>
     ) : (
-      <pre
-        style={{
-          background: C.paper2,
-          padding: "12px 14px",
-          borderRadius: 8,
-          overflowX: "auto",
-          margin: "8px 0",
-        }}
-      >
+      <pre style={{ background: C.paper2, padding: "12px 14px", borderRadius: "var(--radius-sm)", overflowX: "auto", margin: "8px 0" }}>
         <code style={{ fontFamily: "monospace", fontSize: 13, lineHeight: 1.5 }}>{children}</code>
       </pre>
     ),
-  pre: ({ children }) => <>{children}</>,
+  pre:   ({ children }) => <>{children}</>,
   table: ({ children }) => (
-    <table style={{ borderCollapse: "collapse", width: "100%", margin: "8px 0", fontSize: 13 }}>
-      {children}
-    </table>
+    <table style={{ borderCollapse: "collapse", width: "100%", margin: "8px 0", fontSize: 13 }}>{children}</table>
   ),
   th: ({ children }) => (
-    <th
-      style={{
-        border: `1px solid ${C.line}`,
-        padding: "4px 8px",
-        background: C.paper2,
-        fontWeight: 600,
-      }}
-    >
-      {children}
-    </th>
+    <th style={{ border: `1px solid ${C.line}`, padding: "4px 8px", background: C.paper2, fontWeight: 600 }}>{children}</th>
   ),
   td: ({ children }) => (
     <td style={{ border: `1px solid ${C.line}`, padding: "4px 8px" }}>{children}</td>
   ),
 });
 
-function CopyButton({ text, id, copiedKey, onCopy }) {
-  return (
-    <button
-      onClick={() => onCopy(text, id)}
-      style={{
-        position: "absolute",
-        top: 8,
-        right: 8,
-        border: `1px solid ${C.line}`,
-        background: C.paper,
-        color: C.inkSoft,
-        fontSize: 11,
-        padding: "2px 7px",
-        borderRadius: 5,
-        cursor: "pointer",
-        fontFamily: sans,
-        opacity: 0.8,
-      }}
-    >
-      {copiedKey === id ? "✓" : "복사"}
-    </button>
-  );
-}
-
+// ── 답변 버블 ────────────────────────────────────────────────────────────────
 function AnswerBubble({ text, id, copiedKey, onCopy, streaming, onCitationClick }) {
   const components = mdComponents(onCitationClick);
   return (
@@ -167,32 +88,48 @@ function AnswerBubble({ text, id, copiedKey, onCopy, streaming, onCitationClick 
       style={{
         position: "relative",
         background: C.card,
-        border: `1px solid ${C.line}`,
-        borderLeft: `4px solid ${streaming ? C.accent : C.accentSoft}`,
-        borderRadius: "0 12px 12px 0",
-        padding: "14px 50px 14px 18px",
+        borderRadius: "4px 16px 16px 16px",
+        padding: "14px 48px 14px 16px",
         fontSize: 14.5,
         lineHeight: 1.75,
+        boxShadow: streaming ? `0 0 0 2px ${C.accent}40, ${shadow.sm}` : shadow.xs,
+        transition: "box-shadow .3s",
       }}
     >
-      <ReactMarkdown components={components}>
-        {text}
-      </ReactMarkdown>
-      <CopyButton text={text} id={id} copiedKey={copiedKey} onCopy={onCopy} />
+      <ReactMarkdown components={components}>{text}</ReactMarkdown>
+      <button
+        onClick={() => onCopy(text, id)}
+        style={{
+          position: "absolute", top: 8, right: 8,
+          border: `1px solid ${C.line}`,
+          background: C.paper,
+          color: C.inkSoft,
+          fontSize: 11,
+          padding: "2px 7px",
+          borderRadius: 5,
+          cursor: "pointer",
+          fontFamily: sans,
+          opacity: 0.75,
+        }}
+      >
+        {copiedKey === id ? "✓" : "복사"}
+      </button>
     </div>
   );
 }
 
+// ── 출처 카드 ────────────────────────────────────────────────────────────────
 function SourceCard({ s, isOpen, onToggle, query }) {
   return (
     <div
       onClick={onToggle}
       style={{
-        background: C.card,
+        background: C.paper,
         border: `1px solid ${C.line}`,
-        borderRadius: 10,
+        borderRadius: "var(--radius-sm)",
         padding: "8px 12px",
         cursor: "pointer",
+        transition: "background .12s",
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
@@ -201,36 +138,27 @@ function SourceCard({ s, isOpen, onToggle, query }) {
             background: C.accentSoft,
             color: C.accent,
             fontWeight: 700,
-            borderRadius: 6,
+            borderRadius: 5,
             padding: "1px 6px",
             fontSize: 11,
+            flexShrink: 0,
           }}
         >
           {s.n}
         </span>
-        <span
-          style={{
-            fontWeight: 500,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
+        <span style={{ fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
           {s.docName}
         </span>
         <span style={{ marginLeft: "auto", color: C.inkSoft, fontSize: 11, flexShrink: 0 }}>
-          유사도 {s.score}
+          {s.score}
         </span>
       </div>
       {isOpen && (
         <div
           style={{
-            marginTop: 7,
-            paddingTop: 7,
+            marginTop: 7, paddingTop: 7,
             borderTop: `1px dashed ${C.line}`,
-            fontSize: 12.5,
-            color: C.inkSoft,
-            lineHeight: 1.6,
+            fontSize: 12.5, color: C.inkSoft, lineHeight: 1.6,
           }}
         >
           {highlight(s.snippet, query)}…
@@ -240,33 +168,36 @@ function SourceCard({ s, isOpen, onToggle, query }) {
   );
 }
 
+// ── 로딩 점 애니메이션 ───────────────────────────────────────────────────────
+function ThinkingDots() {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "16px 4px" }}>
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          style={{
+            width: 7, height: 7,
+            borderRadius: "50%",
+            background: C.accent,
+            display: "inline-block",
+            animation: `pulse-dot 1.4s ease-in-out ${i * 0.16}s infinite`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ── Chat ─────────────────────────────────────────────────────────────────────
 export default function Chat({ chat, docs: docsHook }) {
   const {
-    question,
-    setQuestion,
-    asking,
-    askError,
-    result,
-    openSrc,
-    setOpenSrc,
-    conversation,
-    openConvSrc,
-    setOpenConvSrc,
-    copiedKey,
-    copyText,
-    exportConversation,
-    clearConversation,
-    ask,
-    regenerate,
-    navigateHistory,
-    scrollRef,
-    toggleFavorite,
-    isFavorited,
-    attachedImage,
-    setAttachedImage,
-    cancelAsk,
-    fullContext,
-    setFullContext,
+    question, setQuestion, asking, askError, result,
+    openSrc, setOpenSrc, conversation, openConvSrc, setOpenConvSrc,
+    copiedKey, copyText, exportConversation, clearConversation,
+    ask, regenerate, navigateHistory, scrollRef,
+    toggleFavorite, isFavorited,
+    attachedImage, setAttachedImage, cancelAsk,
+    fullContext, setFullContext,
   } = chat;
 
   const { selectedDocs, docs, setSelectedDocs } = docsHook;
@@ -278,8 +209,7 @@ export default function Chat({ chat, docs: docsHook }) {
     const reader = new FileReader();
     reader.onload = () => {
       const dataUrl = reader.result;
-      const base64 = dataUrl.split(",")[1];
-      setAttachedImage({ base64, name: file.name, preview: dataUrl });
+      setAttachedImage({ base64: dataUrl.split(",")[1], name: file.name, preview: dataUrl });
     };
     reader.readAsDataURL(file);
   };
@@ -291,11 +221,12 @@ export default function Chat({ chat, docs: docsHook }) {
   return (
     <section
       style={{
-        flex: 1,
-        minWidth: 0,
-        display: "flex",
-        flexDirection: "column",
+        flex: 1, minWidth: 0,
+        display: "flex", flexDirection: "column",
         overflow: "hidden",
+        background: C.card,
+        borderRadius: "var(--radius-lg)",
+        boxShadow: shadow.sm,
       }}
     >
       {/* 라이트박스 */}
@@ -310,14 +241,13 @@ export default function Chat({ chat, docs: docsHook }) {
           }}
         >
           <img
-            src={lightbox}
-            alt="확대 이미지"
-            style={{ maxWidth: "90vw", maxHeight: "90vh", borderRadius: 10, objectFit: "contain", boxShadow: "0 8px 40px rgba(0,0,0,0.5)" }}
+            src={lightbox} alt="확대"
+            style={{ maxWidth: "90vw", maxHeight: "90vh", borderRadius: 12, objectFit: "contain" }}
           />
         </div>
       )}
 
-      {/* ── 헤더 ── */}
+      {/* 대화 헤더 */}
       {conversation.length > 0 && (
         <div
           style={{
@@ -325,60 +255,30 @@ export default function Chat({ chat, docs: docsHook }) {
             display: "flex",
             justifyContent: "flex-end",
             gap: 6,
-            marginBottom: 8,
+            padding: "12px 16px 0",
           }}
         >
-          <button
-            onClick={exportConversation}
-            style={{
-              border: `1px solid ${C.line}`,
-              background: "transparent",
-              color: C.inkSoft,
-              fontSize: 12.5,
-              cursor: "pointer",
-              padding: "3px 9px",
-              fontFamily: sans,
-              borderRadius: 6,
-            }}
-          >
-            내보내기
-          </button>
-          <button
-            onClick={clearConversation}
-            style={{
-              border: "none",
-              background: "transparent",
-              color: C.inkSoft,
-              fontSize: 12.5,
-              cursor: "pointer",
-              padding: "3px 7px",
-              fontFamily: sans,
-            }}
-          >
-            초기화
-          </button>
+          <GhostBtn onClick={exportConversation}>내보내기</GhostBtn>
+          <GhostBtn onClick={clearConversation}>초기화</GhostBtn>
         </div>
       )}
 
-      {/* ── 대화 스크롤 영역 ── */}
+      {/* 대화 스크롤 영역 */}
       <div
         ref={scrollRef}
         style={{
-          flex: 1,
-          overflowY: "auto",
-          paddingRight: 4,
-          display: "flex",
-          flexDirection: "column",
-          gap: 20,
+          flex: 1, overflowY: "auto",
+          padding: "16px 20px",
+          display: "flex", flexDirection: "column", gap: 20,
         }}
       >
         {conversation.length === 0 && !asking && !result && (
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <div style={{ textAlign: "center", color: C.inkSoft, fontSize: 14, lineHeight: 2 }}>
-              <div style={{ fontSize: 32, marginBottom: 8 }}>💬</div>
+              <div style={{ fontSize: 36, marginBottom: 10, opacity: 0.6 }}>💬</div>
               자료를 추가하고 질문해 보세요.
               <br />
-              관련 부분을 찾아 출처와 함께 답합니다.
+              관련 부분을 찾아 <b style={{ color: C.ink }}>출처와 함께</b> 답합니다.
             </div>
           </div>
         )}
@@ -389,33 +289,38 @@ export default function Chat({ chat, docs: docsHook }) {
 
           return (
             <div key={idx} style={{ display: "grid", gap: 8 }}>
-              {/* 질문 버블 */}
-              <div
-                style={{
-                  background: C.paper2,
-                  border: `1px solid ${C.line}`,
-                  borderRadius: "12px 12px 4px 12px",
-                  padding: "10px 14px",
-                  fontSize: 14,
-                  color: C.inkSoft,
-                  maxWidth: "82%",
-                  marginLeft: "auto",
-                  lineHeight: 1.55,
-                  whiteSpace: "pre-wrap",
-                }}
-              >
-                {item.image && (
-                  <img
-                    src={item.image}
-                    alt="첨부 이미지"
-                    onClick={() => setLightbox(item.image)}
-                    style={{ display: "block", maxWidth: "100%", maxHeight: 160, borderRadius: 6, marginBottom: 6, objectFit: "contain", cursor: "zoom-in" }}
-                  />
-                )}
-                {item.q}
+              {/* 사용자 버블 */}
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <div
+                  style={{
+                    background: C.userBubble,
+                    color: "#fff",
+                    borderRadius: "16px 4px 16px 16px",
+                    padding: "10px 15px",
+                    fontSize: 14,
+                    maxWidth: "80%",
+                    lineHeight: 1.6,
+                    whiteSpace: "pre-wrap",
+                    boxShadow: shadow.xs,
+                  }}
+                >
+                  {item.image && (
+                    <img
+                      src={item.image} alt="첨부"
+                      onClick={() => setLightbox(item.image)}
+                      style={{
+                        display: "block", maxWidth: "100%", maxHeight: 160,
+                        borderRadius: 8, marginBottom: 7,
+                        objectFit: "contain", cursor: "zoom-in",
+                        opacity: 0.92,
+                      }}
+                    />
+                  )}
+                  {item.q}
+                </div>
               </div>
 
-              {/* 답변 */}
+              {/* 답변 버블 */}
               <AnswerBubble
                 text={item.a}
                 id={idx}
@@ -425,76 +330,40 @@ export default function Chat({ chat, docs: docsHook }) {
                 onCitationClick={handleCitation}
               />
 
-              {/* 재생성 + 즐겨찾기 버튼 */}
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 6 }}>
-                <button
+              {/* 액션 버튼 */}
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 5 }}>
+                <GhostBtn
                   onClick={() => toggleFavorite(item)}
+                  active={isFavorited(item.q, item.a)}
                   title={isFavorited(item.q, item.a) ? "즐겨찾기 해제" : "즐겨찾기 저장"}
-                  style={{
-                    border: `1px solid ${isFavorited(item.q, item.a) ? C.accent : C.line}`,
-                    background: isFavorited(item.q, item.a) ? C.accentSoft : "transparent",
-                    color: isFavorited(item.q, item.a) ? C.accent : C.inkSoft,
-                    fontSize: 12,
-                    cursor: "pointer",
-                    padding: "3px 8px",
-                    borderRadius: 6,
-                    fontFamily: sans,
-                  }}
                 >
                   {isFavorited(item.q, item.a) ? "★ 저장됨" : "☆ 저장"}
-                </button>
+                </GhostBtn>
                 {isLast && !asking && (
-                  <button
-                    onClick={() => regenerate(selectedDocs)}
-                    style={{
-                      border: `1px solid ${C.line}`,
-                      background: "transparent",
-                      color: C.inkSoft,
-                      fontSize: 12,
-                      cursor: "pointer",
-                      padding: "3px 9px",
-                      borderRadius: 6,
-                      fontFamily: sans,
-                    }}
-                  >
-                    ↺ 재생성
-                  </button>
+                  <GhostBtn onClick={() => regenerate(selectedDocs)}>↺ 재생성</GhostBtn>
                 )}
               </div>
 
-              {/* 출처 토글 */}
+              {/* 출처 */}
               {item.sources?.length > 0 && (
-                <div style={{ paddingLeft: 4 }}>
+                <div>
                   <button
-                    onClick={() =>
-                      setOpenConvSrc(openConvSrc?.turn === idx ? null : { turn: idx, srcN: null })
-                    }
+                    onClick={() => setOpenConvSrc(openConvSrc?.turn === idx ? null : { turn: idx, srcN: null })}
                     style={{
-                      border: "none",
-                      background: "transparent",
-                      color: C.inkSoft,
-                      fontSize: 12.5,
-                      cursor: "pointer",
-                      padding: 0,
-                      fontFamily: sans,
+                      border: "none", background: "transparent",
+                      color: C.inkSoft, fontSize: 12, cursor: "pointer",
+                      padding: "2px 4px", fontFamily: sans,
                     }}
                   >
                     출처 {item.sources.length}개 {openConvSrc?.turn === idx ? "▲" : "▼"}
                   </button>
                   {openConvSrc?.turn === idx && (
-                    <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+                    <div style={{ display: "grid", gap: 5, marginTop: 6 }}>
                       {item.sources.map((s) => (
                         <SourceCard
-                          key={s.n}
-                          s={s}
-                          query={item.q}
+                          key={s.n} s={s} query={item.q}
                           isOpen={openConvSrc?.srcN === s.n}
-                          onToggle={() =>
-                            setOpenConvSrc({
-                              turn: idx,
-                              srcN: openConvSrc?.srcN === s.n ? null : s.n,
-                            })
-                          }
+                          onToggle={() => setOpenConvSrc({ turn: idx, srcN: openConvSrc?.srcN === s.n ? null : s.n })}
                         />
                       ))}
                     </div>
@@ -505,25 +374,24 @@ export default function Chat({ chat, docs: docsHook }) {
           );
         })}
 
-        {/* 로딩 스피너 */}
+        {/* 로딩 */}
         {asking && !result?.answer && (
-          <div
-            className="rise"
-            style={{ textAlign: "center", padding: "24px 0", color: C.inkSoft }}
-          >
-            <span
-              className="spin"
+          <div className="rise">
+            <div
               style={{
-                width: 28,
-                height: 28,
-                border: `3px solid ${C.accentSoft}`,
-                borderTopColor: C.accent,
-                borderRadius: "50%",
+                background: C.card,
+                borderRadius: "4px 16px 16px 16px",
+                padding: "10px 16px",
+                boxShadow: shadow.xs,
                 display: "inline-block",
               }}
-            />
-            <div style={{ fontSize: 13.5, marginTop: 10 }}>
-              {result?.status || "관련 부분을 찾아 답을 만드는 중…"}
+            >
+              <ThinkingDots />
+              {result?.status && (
+                <div style={{ fontSize: 12.5, color: C.inkSoft, marginTop: 2 }}>
+                  {result.status}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -531,21 +399,22 @@ export default function Chat({ chat, docs: docsHook }) {
         {/* 스트리밍 결과 */}
         {result && (
           <div className="rise" style={{ display: "grid", gap: 8 }}>
-            <div
-              style={{
-                background: C.paper2,
-                border: `1px solid ${C.line}`,
-                borderRadius: "12px 12px 4px 12px",
-                padding: "10px 14px",
-                fontSize: 14,
-                color: C.inkSoft,
-                maxWidth: "82%",
-                marginLeft: "auto",
-                lineHeight: 1.55,
-                whiteSpace: "pre-wrap",
-              }}
-            >
-              {question}
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <div
+                style={{
+                  background: C.userBubble,
+                  color: "#fff",
+                  borderRadius: "16px 4px 16px 16px",
+                  padding: "10px 15px",
+                  fontSize: 14,
+                  maxWidth: "80%",
+                  lineHeight: 1.6,
+                  whiteSpace: "pre-wrap",
+                  boxShadow: shadow.xs,
+                }}
+              >
+                {question}
+              </div>
             </div>
             <AnswerBubble
               text={result.answer || ""}
@@ -557,23 +426,13 @@ export default function Chat({ chat, docs: docsHook }) {
             />
             {result.sources?.length > 0 && (
               <div>
-                <div
-                  style={{
-                    fontSize: 12.5,
-                    color: C.inkSoft,
-                    marginBottom: 6,
-                    fontWeight: 600,
-                    paddingLeft: 4,
-                  }}
-                >
+                <div style={{ fontSize: 12, color: C.inkSoft, marginBottom: 5, fontWeight: 600, paddingLeft: 2 }}>
                   출처
                 </div>
-                <div style={{ display: "grid", gap: 7 }}>
+                <div style={{ display: "grid", gap: 5 }}>
                   {result.sources.map((s) => (
                     <SourceCard
-                      key={s.n}
-                      s={s}
-                      query={question}
+                      key={s.n} s={s} query={question}
                       isOpen={openSrc === s.n}
                       onToggle={() => setOpenSrc(openSrc === s.n ? null : s.n)}
                     />
@@ -588,30 +447,49 @@ export default function Chat({ chat, docs: docsHook }) {
       </div>
 
       {/* ── 입력 영역 ── */}
-      <div style={{ flexShrink: 0, paddingTop: 10 }}>
+      <div style={{ flexShrink: 0, padding: "12px 16px 16px" }}>
+        {/* 범위 표시 */}
         {selectedDocs.size > 0 && (
-          <div style={{ fontSize: 12.5, color: C.accent, marginBottom: 7, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span>
-              {selectedDocs.size}개 문서 범위로 검색 중 ·{" "}
-              <span
-                style={{ cursor: "pointer", textDecoration: "underline" }}
-                onClick={() => setSelectedDocs(new Set())}
-              >
-                전체 해제
-              </span>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              marginBottom: 8,
+              flexWrap: "wrap",
+              fontSize: 12.5,
+            }}
+          >
+            <span
+              style={{
+                background: C.accentSoft,
+                color: C.accent,
+                borderRadius: 99,
+                padding: "3px 10px",
+                fontWeight: 500,
+              }}
+            >
+              {selectedDocs.size}개 문서 범위
+            </span>
+            <span
+              style={{ color: C.inkSoft, cursor: "pointer", fontSize: 12 }}
+              onClick={() => setSelectedDocs(new Set())}
+            >
+              전체 해제
             </span>
             <button
               onClick={() => setFullContext((v) => !v)}
-              title="선택 문서의 전체 내용을 컨텍스트로 사용"
               style={{
                 border: `1px solid ${fullContext ? C.accent : C.line}`,
                 background: fullContext ? C.accentSoft : "transparent",
                 color: fullContext ? C.accent : C.inkSoft,
-                fontSize: 11.5,
-                padding: "2px 8px",
-                borderRadius: 6,
+                fontSize: 12,
+                padding: "3px 10px",
+                borderRadius: 99,
                 cursor: "pointer",
                 fontFamily: sans,
+                fontWeight: fullContext ? 600 : 400,
+                transition: "all .15s",
               }}
             >
               전체 내용
@@ -624,8 +502,14 @@ export default function Chat({ chat, docs: docsHook }) {
           <div style={{ position: "relative", display: "inline-block", marginBottom: 8 }}>
             <img
               src={attachedImage.preview}
-              alt="첨부 이미지"
-              style={{ maxHeight: 100, maxWidth: 180, borderRadius: 8, border: `1px solid ${C.line}`, objectFit: "contain", display: "block" }}
+              alt="첨부"
+              style={{
+                maxHeight: 90, maxWidth: 160,
+                borderRadius: "var(--radius-sm)",
+                border: `1px solid ${C.line}`,
+                objectFit: "contain",
+                display: "block",
+              }}
             />
             <button
               onClick={() => setAttachedImage(null)}
@@ -639,130 +523,148 @@ export default function Chat({ chat, docs: docsHook }) {
           </div>
         )}
 
-        {/* 숨김 파일 입력 */}
-        <input
-          ref={imgInputRef}
-          type="file"
-          accept="image/*"
-          style={{ display: "none" }}
+        <input ref={imgInputRef} type="file" accept="image/*" style={{ display: "none" }}
           onChange={(e) => { handleImageFile(e.target.files?.[0]); e.target.value = ""; }}
         />
 
-        <textarea
-          value={question}
-          onChange={(e) => {
-            setQuestion(e.target.value);
-          }}
-          onPaste={(e) => {
-            const items = Array.from(e.clipboardData?.items || []);
-            const imgItem = items.find((it) => it.type.startsWith("image/"));
-            if (imgItem) {
-              e.preventDefault();
-              handleImageFile(imgItem.getAsFile());
-            }
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
-              e.preventDefault();
-              ask(selectedDocs);
-              return;
-            }
-            // ↑: 커서가 맨 앞일 때 이전 질문
-            if (e.key === "ArrowUp" && e.target.selectionStart === 0 && !e.shiftKey) {
-              e.preventDefault();
-              navigateHistory(-1);
-            }
-            // ↓: 커서가 맨 뒤일 때 다음 질문
-            if (
-              e.key === "ArrowDown" &&
-              e.target.selectionStart === e.target.value.length &&
-              !e.shiftKey
-            ) {
-              e.preventDefault();
-              navigateHistory(1);
-            }
-          }}
-          placeholder="내 자료에 대해 물어보세요. (Enter로 질문 / Shift+Enter 줄바꿈 / 이미지 붙여넣기 가능)"
-          rows={3}
-          style={{
-            width: "100%",
-            resize: "none",
-            fontFamily: sans,
-            fontSize: 14.5,
-            color: C.ink,
-            background: C.card,
-            border: `1px solid ${C.line}`,
-            borderRadius: 12,
-            padding: "12px 14px",
-            outline: "none",
-            lineHeight: 1.6,
-            boxSizing: "border-box",
-          }}
-        />
-
+        {/* 텍스트 입력 박스 */}
         <div
           style={{
-            display: "flex",
-            justifyContent: "flex-end",
-            alignItems: "center",
-            marginTop: 8,
-            gap: 10,
+            border: `1.5px solid ${C.line}`,
+            borderRadius: "var(--radius-md)",
+            background: C.paper,
+            transition: "border-color .15s, box-shadow .15s",
+            overflow: "hidden",
+          }}
+          onFocusCapture={(e) => {
+            e.currentTarget.style.borderColor = C.accent;
+            e.currentTarget.style.boxShadow = `0 0 0 3px ${C.accentSoft}`;
+          }}
+          onBlurCapture={(e) => {
+            e.currentTarget.style.borderColor = "";
+            e.currentTarget.style.boxShadow = "";
           }}
         >
-          {askError && <span style={{ fontSize: 13, color: C.accent, flex: 1 }}>{askError}</span>}
-          <button
-            onClick={() => imgInputRef.current?.click()}
-            title="이미지 첨부 (OCR로 텍스트 추출)"
-            disabled={asking}
-            style={{
-              border: `1px solid ${attachedImage ? C.accent : C.line}`,
-              background: attachedImage ? C.accentSoft : "transparent",
-              color: attachedImage ? C.accent : C.inkSoft,
-              borderRadius: 10,
-              padding: "9px 12px",
-              fontSize: 15,
-              cursor: asking ? "default" : "pointer",
-              lineHeight: 1,
+          <textarea
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            onPaste={(e) => {
+              const img = Array.from(e.clipboardData?.items || []).find((it) => it.type.startsWith("image/"));
+              if (img) { e.preventDefault(); handleImageFile(img.getAsFile()); }
             }}
-          >🖼</button>
-          {asking ? (
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+                e.preventDefault(); ask(selectedDocs); return;
+              }
+              if (e.key === "ArrowUp" && e.target.selectionStart === 0 && !e.shiftKey) {
+                e.preventDefault(); navigateHistory(-1);
+              }
+              if (e.key === "ArrowDown" && e.target.selectionStart === e.target.value.length && !e.shiftKey) {
+                e.preventDefault(); navigateHistory(1);
+              }
+            }}
+            placeholder="내 자료에 대해 물어보세요. (Enter 질문 · Shift+Enter 줄바꿈)"
+            rows={3}
+            style={{
+              width: "100%",
+              resize: "none",
+              fontFamily: sans,
+              fontSize: 14,
+              color: C.ink,
+              background: "transparent",
+              border: "none",
+              padding: "12px 14px 8px",
+              outline: "none",
+              lineHeight: 1.65,
+              boxSizing: "border-box",
+            }}
+          />
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "flex-end",
+              padding: "6px 10px 10px",
+              gap: 8,
+            }}
+          >
+            {askError && <span style={{ fontSize: 12.5, color: "#dc2626", flex: 1 }}>{askError}</span>}
+
             <button
-              onClick={cancelAsk}
+              onClick={() => imgInputRef.current?.click()}
+              title="이미지 첨부"
+              disabled={asking}
               style={{
-                border: `1px solid ${C.accent}`,
-                background: "transparent",
-                color: C.accent,
-                padding: "9px 22px",
-                borderRadius: 10,
-                fontSize: 14,
-                fontWeight: 600,
-                cursor: "pointer",
-                flexShrink: 0,
+                border: `1px solid ${attachedImage ? C.accent : C.line}`,
+                background: attachedImage ? C.accentSoft : "transparent",
+                color: attachedImage ? C.accent : C.inkSoft,
+                borderRadius: "var(--radius-sm)",
+                padding: "6px 10px",
+                fontSize: 15,
+                cursor: asking ? "default" : "pointer",
+                lineHeight: 1,
               }}
-            >
-              ■ 중단
-            </button>
-          ) : (
-            <button
-              onClick={() => ask(selectedDocs)}
-              disabled={!question.trim() || docs.length === 0}
-              style={{
-                border: "none",
-                background: !question.trim() || docs.length === 0 ? C.line : C.ink,
-                color: C.paper,
-                padding: "9px 22px",
-                borderRadius: 10,
-                fontSize: 14,
-                fontWeight: 600,
-                cursor: !question.trim() || docs.length === 0 ? "default" : "pointer",
-                flexShrink: 0,
-              }}
-            >
-              질문
-            </button>
-          )}
+            >🖼</button>
+
+            {asking ? (
+              <button
+                onClick={cancelAsk}
+                style={{
+                  border: `1.5px solid ${C.accent}`,
+                  background: "transparent",
+                  color: C.accent,
+                  padding: "7px 18px",
+                  borderRadius: "var(--radius-sm)",
+                  fontSize: 13.5,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontFamily: sans,
+                  transition: "all .15s",
+                }}
+              >■ 중단</button>
+            ) : (
+              <button
+                onClick={() => ask(selectedDocs)}
+                disabled={!question.trim() || docs.length === 0}
+                style={{
+                  border: "none",
+                  background: !question.trim() || docs.length === 0 ? C.line : C.accent,
+                  color: !question.trim() || docs.length === 0 ? C.inkSoft : "#fff",
+                  padding: "7px 20px",
+                  borderRadius: "var(--radius-sm)",
+                  fontSize: 13.5,
+                  fontWeight: 600,
+                  cursor: !question.trim() || docs.length === 0 ? "default" : "pointer",
+                  fontFamily: sans,
+                  transition: "all .15s",
+                }}
+              >질문</button>
+            )}
+          </div>
         </div>
       </div>
     </section>
+  );
+}
+
+function GhostBtn({ children, onClick, active, title }) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      style={{
+        border: `1px solid ${active ? C.accent : C.line}`,
+        background: active ? C.accentSoft : "transparent",
+        color: active ? C.accent : C.inkSoft,
+        fontSize: 12,
+        cursor: "pointer",
+        padding: "3px 10px",
+        borderRadius: 6,
+        fontFamily: sans,
+        transition: "all .12s",
+      }}
+    >
+      {children}
+    </button>
   );
 }

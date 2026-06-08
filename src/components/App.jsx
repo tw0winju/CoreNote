@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { C, sans } from "../theme";
+import { C, sans, shadow } from "../theme";
 import useDocs from "../hooks/useDocs";
 import useIndexing from "../hooks/useIndexing";
 import useChat from "../hooks/useChat";
@@ -13,7 +13,9 @@ import Chat from "./Chat";
 import LearnPage from "./LearnPage";
 
 export default function App() {
-  const [darkMode, setDarkMode] = useState(() => localStorage.getItem("corenote_theme") === "dark");
+  const [darkMode, setDarkMode] = useState(
+    () => localStorage.getItem("corenote_theme") === "dark",
+  );
   const [page, setPage] = useState("main");
 
   useEffect(() => {
@@ -21,26 +23,17 @@ export default function App() {
     localStorage.setItem("corenote_theme", darkMode ? "dark" : "light");
   }, [darkMode]);
 
-  const docsHook = useDocs();
+  const docsHook     = useDocs();
   const settingsHook = useSettings(docsHook.loadHealth);
   const indexingHook = useIndexing(async () => {
     await docsHook.loadDocs();
     await docsHook.loadHealth();
   });
   const memoryHook = useMemory();
-  const chatHook = useChat(memoryHook.refresh);
+  const chatHook   = useChat(memoryHook.refresh);
 
   return (
-    <div
-      style={{
-        fontFamily: sans,
-        color: C.ink,
-        height: "100vh",
-        display: "flex",
-        overflow: "hidden",
-        background: C.paper,
-      }}
-    >
+    <div style={{ fontFamily: sans, color: C.ink, height: "100vh", display: "flex", overflow: "hidden" }}>
       {settingsHook.showSettings && settingsHook.settingsForm && (
         <SettingsModal
           form={settingsHook.settingsForm}
@@ -50,105 +43,67 @@ export default function App() {
         />
       )}
 
-      <SessionSidebar chat={chatHook} memory={memoryHook} />
+      <SessionSidebar
+        chat={chatHook}
+        memory={memoryHook}
+        page={page}
+        setPage={setPage}
+      />
 
-      <div
-        style={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          overflow: "hidden",
-          background: `radial-gradient(circle at 60% 10%, ${C.paper2}, ${C.paper} 60%)`,
-        }}
-      >
+      {/* 메인 콘텐츠 */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: C.paper }}>
         {/* 상단바 */}
         <div
           style={{
             flexShrink: 0,
-            padding: "18px 24px 10px",
+            height: 52,
+            padding: "0 20px",
             display: "flex",
-            alignItems: "flex-start",
-            gap: 12,
+            alignItems: "center",
+            gap: 8,
+            borderBottom: `1px solid ${C.line}`,
+            background: C.card,
           }}
         >
-          {/* 페이지 탭 */}
-          <div style={{ display: "flex", gap: 4, flexShrink: 0, alignSelf: "center" }}>
-            {[["main", "💬 대화"], ["learn", "📖 학습"]].map(([key, label]) => (
-              <button
-                key={key}
-                onClick={() => setPage(key)}
-                style={{
-                  border: `1px solid ${page === key ? C.accent : C.line}`,
-                  background: page === key ? C.accentSoft : "transparent",
-                  color: page === key ? C.accent : C.inkSoft,
-                  padding: "5px 13px",
-                  borderRadius: 8,
-                  fontSize: 13,
-                  cursor: "pointer",
-                  fontFamily: sans,
-                  fontWeight: page === key ? 600 : 400,
-                  transition: "all .15s",
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          {page === "main" && (
+            <div style={{ flex: 1 }}>
+              <WarningBanner health={docsHook.health} />
+            </div>
+          )}
+          {page !== "main" && <div style={{ flex: 1 }} />}
 
-          <div style={{ flex: 1 }}>
-            {page === "main" && <WarningBanner health={docsHook.health} />}
-          </div>
-
-          {/* 다크모드 토글 */}
-          <button
-            onClick={() => setDarkMode((v) => !v)}
+          <IconBtn
             title={darkMode ? "라이트 모드" : "다크 모드"}
-            style={{
-              border: `1px solid ${C.line}`,
-              background: "transparent",
-              color: C.inkSoft,
-              borderRadius: 8,
-              padding: "5px 10px",
-              fontSize: 15,
-              cursor: "pointer",
-              flexShrink: 0,
-              lineHeight: 1,
-            }}
+            onClick={() => setDarkMode((v) => !v)}
           >
             {darkMode ? "☀" : "☾"}
-          </button>
-
-          <button
-            onClick={() => settingsHook.setShowSettings(true)}
-            title="설정"
-            style={{
-              border: `1px solid ${C.line}`,
-              background: "transparent",
-              color: C.inkSoft,
-              borderRadius: 8,
-              padding: "5px 10px",
-              fontSize: 16,
-              cursor: "pointer",
-              flexShrink: 0,
-              lineHeight: 1,
-            }}
-          >
+          </IconBtn>
+          <IconBtn title="설정" onClick={() => settingsHook.setShowSettings(true)}>
             ⚙
-          </button>
+          </IconBtn>
         </div>
 
-        {/* 콘텐츠 영역 */}
+        {/* 페이지 */}
         {page === "main" ? (
           <div
             style={{
               flex: 1,
               overflow: "hidden",
-              padding: "0 24px 16px",
+              padding: "20px",
               display: "flex",
-              gap: 20,
+              gap: 16,
             }}
           >
-            <div style={{ flex: "0 0 300px", overflowY: "auto", paddingRight: 4 }}>
+            <div
+              style={{
+                flex: "0 0 300px",
+                overflowY: "auto",
+                background: C.card,
+                borderRadius: "var(--radius-lg)",
+                padding: "18px",
+                boxShadow: shadow.sm,
+              }}
+            >
               <Library docs={docsHook} indexing={indexingHook} />
             </div>
             <Chat chat={chatHook} docs={docsHook} />
@@ -158,5 +113,27 @@ export default function App() {
         )}
       </div>
     </div>
+  );
+}
+
+function IconBtn({ children, title, onClick }) {
+  return (
+    <button
+      title={title}
+      onClick={onClick}
+      style={{
+        border: `1px solid ${C.line}`,
+        background: "transparent",
+        color: C.inkSoft,
+        borderRadius: "var(--radius-sm)",
+        padding: "5px 10px",
+        fontSize: 15,
+        lineHeight: 1,
+        transition: "all .15s",
+        flexShrink: 0,
+      }}
+    >
+      {children}
+    </button>
   );
 }

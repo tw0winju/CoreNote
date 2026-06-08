@@ -14,48 +14,36 @@ export default function MemoryPanel({ memories, onAdd, onDelete }) {
   };
 
   return (
-    <div style={{ borderTop: `1px solid ${C.line}`, flexShrink: 0 }}>
-      {/* 헤더 토글 */}
+    <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
       <button
         onClick={() => setOpen((v) => !v)}
         style={{
           width: "100%",
           display: "flex",
           alignItems: "center",
-          gap: 6,
+          gap: 8,
           padding: "10px 16px",
           border: "none",
           background: "transparent",
           cursor: "pointer",
           fontFamily: sans,
           fontSize: 12.5,
-          color: C.inkSoft,
+          color: "rgba(255,255,255,0.38)",
         }}
       >
         <span style={{ fontSize: 13 }}>🧠</span>
-        <span style={{ flex: 1, textAlign: "left", fontWeight: 600 }}>
+        <span style={{ flex: 1, textAlign: "left", fontWeight: 600, color: "rgba(255,255,255,0.45)" }}>
           기억 {memories.length > 0 ? `(${memories.length})` : ""}
         </span>
-        <span style={{ fontSize: 10 }}>{open ? "▲" : "▼"}</span>
+        <span style={{ fontSize: 9 }}>{open ? "▲" : "▼"}</span>
       </button>
 
       {open && (
-        <div style={{ padding: "0 10px 10px" }}>
-          {/* 기억 목록 */}
-          <div
-            style={{
-              maxHeight: 220,
-              overflowY: "auto",
-              display: "grid",
-              gap: 5,
-              marginBottom: 8,
-            }}
-          >
+        <div style={{ padding: "0 10px 12px" }}>
+          <div style={{ maxHeight: 200, overflowY: "auto", display: "grid", gap: 4, marginBottom: 7 }}>
             {memories.length === 0 && (
-              <div style={{ fontSize: 12, color: C.inkSoft, padding: "4px 2px", lineHeight: 1.5 }}>
+              <div style={{ fontSize: 11.5, color: "rgba(255,255,255,0.22)", padding: "4px 2px", lineHeight: 1.6 }}>
                 아직 기억이 없어요.
-                <br />
-                대화하면 자동으로 생성돼요.
               </div>
             )}
             {memories.map((m) => (
@@ -64,38 +52,30 @@ export default function MemoryPanel({ memories, onAdd, onDelete }) {
                 style={{
                   display: "flex",
                   alignItems: "flex-start",
-                  gap: 6,
-                  background: C.paper2,
-                  borderRadius: 8,
+                  gap: 5,
+                  background: "rgba(255,255,255,0.05)",
+                  borderRadius: 7,
                   padding: "6px 8px",
-                  fontSize: 12,
-                  lineHeight: 1.5,
+                  fontSize: 11.5,
+                  lineHeight: 1.55,
                 }}
               >
-                <span style={{ fontSize: 11, color: C.inkSoft, flexShrink: 0, marginTop: 1 }}>
+                <span style={{ fontSize: 10, color: "rgba(255,255,255,0.28)", flexShrink: 0, marginTop: 1 }}>
                   {m.source === "auto" ? "✦" : "✎"}
                 </span>
-                <span style={{ flex: 1, color: C.ink }}>{m.content}</span>
+                <span style={{ flex: 1, color: "rgba(255,255,255,0.6)" }}>{m.content}</span>
                 <button
                   onClick={() => onDelete(m.id)}
                   style={{
-                    border: "none",
-                    background: "transparent",
-                    color: C.inkSoft,
-                    fontSize: 14,
-                    lineHeight: 1,
-                    cursor: "pointer",
-                    padding: "0 1px",
-                    flexShrink: 0,
+                    border: "none", background: "transparent",
+                    color: "rgba(255,255,255,0.22)", fontSize: 13,
+                    lineHeight: 1, cursor: "pointer", padding: "0 1px", flexShrink: 0,
                   }}
-                >
-                  ×
-                </button>
+                >×</button>
               </div>
             ))}
           </div>
 
-          {/* 직접 추가 */}
           {showInput ? (
             <div style={{ display: "flex", gap: 4 }}>
               <input
@@ -109,48 +89,40 @@ export default function MemoryPanel({ memories, onAdd, onDelete }) {
                 placeholder="기억할 내용"
                 style={{
                   flex: 1,
-                  padding: "4px 7px",
-                  borderRadius: 7,
-                  border: `1px solid ${C.accent}`,
+                  padding: "5px 8px",
+                  borderRadius: 6,
+                  border: "1px solid rgba(255,255,255,0.14)",
                   fontFamily: sans,
                   fontSize: 12,
-                  background: C.card,
+                  background: "rgba(255,255,255,0.07)",
+                  color: "#fff",
                   outline: "none",
                 }}
               />
               <button
                 onClick={handleAdd}
                 style={{
-                  border: "none",
-                  background: C.ink,
-                  color: C.paper,
-                  padding: "4px 9px",
-                  borderRadius: 7,
-                  fontSize: 12,
-                  cursor: "pointer",
-                  fontFamily: sans,
+                  border: "none", background: C.accent, color: "#fff",
+                  padding: "5px 9px", borderRadius: 6,
+                  fontSize: 12, cursor: "pointer", fontFamily: sans,
                 }}
-              >
-                추가
-              </button>
+              >추가</button>
             </div>
           ) : (
             <button
               onClick={() => setShowInput(true)}
               style={{
                 width: "100%",
-                border: `1px dashed ${C.line}`,
+                border: "1px dashed rgba(255,255,255,0.11)",
                 background: "transparent",
-                color: C.inkSoft,
-                padding: "4px 0",
+                color: "rgba(255,255,255,0.28)",
+                padding: "5px 0",
                 borderRadius: 7,
                 fontSize: 12,
                 cursor: "pointer",
                 fontFamily: sans,
               }}
-            >
-              + 직접 추가
-            </button>
+            >+ 직접 추가</button>
           )}
         </div>
       )}
