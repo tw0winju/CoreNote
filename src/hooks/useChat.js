@@ -83,21 +83,139 @@ export default function useChat(onMemoryExtracted) {
       .catch(() => {});
   };
 
-  const exportConversation = () => {
-    const lines = ["# 코어노트 대화 기록", `\n*${new Date().toLocaleDateString("ko-KR")}*\n`];
-    for (const item of conversation) {
-      lines.push(`---\n\n**Q: ${item.q}**\n\n${item.a}`);
-      if (item.sources?.length > 0)
-        lines.push(
-          "\n출처: " + item.sources.map((s) => `${s.docName} (유사도 ${s.score})`).join(", "),
-        );
+  const exportConversation = (format = "txt") => {
+    const date = new Date().toLocaleDateString("ko-KR");
+    // eslint-disable-next-line react-hooks/purity
+    const ts = Date.now();
+
+    if (format === "txt") {
+      const lines = [`코어노트 대화 기록\n${date}\n`];
+      for (const item of conversation) {
+        lines.push(`${"─".repeat(40)}\n\nQ: ${item.q}\n\nA: ${item.a}`);
+        if (item.sources?.length > 0)
+          lines.push(
+            "\n출처: " + item.sources.map((s) => `${s.docName} (유사도 ${s.score})`).join(", "),
+          );
+      }
+      const blob = new Blob([lines.join("\n\n")], { type: "text/plain;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `corenote-${ts}.txt`;
+      a.click();
+      return;
     }
-    const blob = new Blob([lines.join("\n\n")], { type: "text/markdown" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `corenote-${Date.now()}.md`;
-    a.click();
+
+    const htmlBody = conversation
+      .map(
+        (item) => `
+      <div class="card">
+        <div class="q"><span class="badge">Q</span>${escHtml(item.q)}</div>
+        ${item.image ? `<img src="${item.image}" class="thumb" alt="첨부 이미지">` : ""}
+        <div class="a"><span class="badge a-badge">A</span><div class="md">${mdToHtml(item.a)}</div></div>
+        ${
+          item.sources?.length > 0
+            ? `<div class="src">출처: ${item.sources.map((s) => `<span class="chip">${escHtml(s.docName)}</span>`).join(" ")}</div>`
+            : ""
+        }
+      </div>`,
+      )
+      .join("");
+
+    const html = `<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>코어노트 대화 기록</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+         background: #f5f5f5; color: #1a1a1a; padding: 16px; font-size: 15px; line-height: 1.7; }
+  h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  .meta { color: #666; font-size: 13px; margin-bottom: 20px; }
+  .card { background: #fff; border-radius: 12px; padding: 18px; margin-bottom: 16px;
+          box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  .badge { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 4px;
+           padding: 1px 6px; margin-right: 8px; vertical-align: middle; flex-shrink: 0; }
+  .q { font-weight: 600; display: flex; align-items: flex-start; gap: 6px;
+       padding-bottom: 12px; border-bottom: 1px solid #eee; margin-bottom: 12px; }
+  .q .badge { background: #e0e7ff; color: #3730a3; margin-top: 3px; }
+  .a { display: flex; align-items: flex-start; gap: 6px; }
+  .a-badge { background: #d1fae5; color: #065f46; margin-top: 3px; }
+  .md { flex: 1; }
+  .md h1,.md h2,.md h3 { margin: 12px 0 6px; font-size: 1em; }
+  .md p { margin-bottom: 8px; }
+  .md ul,.md ol { padding-left: 20px; margin-bottom: 8px; }
+  .md li { margin-bottom: 4px; }
+  .md code { background: #f3f4f6; border-radius: 3px; padding: 1px 5px; font-size: 13px; }
+  .md pre { background: #f3f4f6; border-radius: 6px; padding: 12px; overflow-x: auto;
+            font-size: 13px; margin-bottom: 8px; }
+  .md pre code { background: none; padding: 0; }
+  .md strong { font-weight: 600; }
+  .thumb { max-width: 100%; border-radius: 8px; margin: 8px 0; }
+  .src { margin-top: 10px; font-size: 12px; color: #888; }
+  .chip { display: inline-block; background: #f0f0f0; border-radius: 4px;
+          padding: 1px 7px; margin-right: 4px; }
+  @media print { body { background: #fff; padding: 0; }
+    .card { box-shadow: none; border: 1px solid #ddd; break-inside: avoid; } }
+  @media (prefers-color-scheme: dark) {
+    body { background: #111; color: #e5e5e5; }
+    .card { background: #1e1e1e; box-shadow: none; }
+    .q { border-color: #333; }
+    .md code,.md pre { background: #2a2a2a; }
+    .chip { background: #2a2a2a; }
+    .src { color: #777; }
+  }
+</style>
+</head>
+<body>
+<h1>코어노트 대화 기록</h1>
+<p class="meta">${date} · ${conversation.length}개 대화</p>
+${htmlBody}
+</body>
+</html>`;
+
+    if (format === "html") {
+      const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `corenote-${ts}.html`;
+      a.click();
+    } else if (format === "pdf") {
+      const win = window.open("", "_blank");
+      win.document.write(html);
+      win.document.close();
+      win.onload = () => win.print();
+    }
   };
+
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function mdToHtml(md) {
+    return md
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/```[\w]*\n?([\s\S]*?)```/g, (_, c) => `<pre><code>${c.trim()}</code></pre>`)
+      .replace(/`([^`]+)`/g, "<code>$1</code>")
+      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+      .replace(/\*(.+?)\*/g, "<em>$1</em>")
+      .replace(/^### (.+)$/gm, "<h3>$1</h3>")
+      .replace(/^## (.+)$/gm, "<h2>$1</h2>")
+      .replace(/^# (.+)$/gm, "<h1>$1</h1>")
+      .replace(/^[-*] (.+)$/gm, "<li>$1</li>")
+      .replace(/(<li>[\s\S]*?<\/li>)/g, "<ul>$1</ul>")
+      .replace(/\n{2,}/g, "</p><p>")
+      .replace(/\n/g, "<br>")
+      .replace(/^(?!<[hup])(.+)/, "<p>$1")
+      .replace(/([^>])$/, "$1</p>");
+  }
 
   const clearConversation = () => {
     setConversation([]);

@@ -292,6 +292,7 @@ export default function Chat({ chat, docs: docsHook }) {
   const { selectedDocs, docs, setSelectedDocs } = docsHook;
   const imgInputRef = useRef(null);
   const [lightbox, setLightbox] = useState(null);
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   const handleImageFile = (file) => {
     if (!file || !file.type.startsWith("image/")) return;
@@ -306,6 +307,13 @@ export default function Chat({ chat, docs: docsHook }) {
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [conversation.length, result?.answer, scrollRef]);
+
+  useEffect(() => {
+    if (!showExportMenu) return;
+    const close = () => setShowExportMenu(false);
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [showExportMenu]);
 
   return (
     <section
@@ -354,7 +362,55 @@ export default function Chat({ chat, docs: docsHook }) {
             padding: "12px 16px 0",
           }}
         >
-          <GhostBtn onClick={exportConversation}>내보내기</GhostBtn>
+          <div style={{ position: "relative" }}>
+            <GhostBtn onClick={() => setShowExportMenu((v) => !v)}>내보내기 ▾</GhostBtn>
+            {showExportMenu && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "calc(100% + 4px)",
+                  right: 0,
+                  background: C.card,
+                  border: `1px solid ${C.line}`,
+                  borderRadius: 8,
+                  boxShadow: shadow.sm,
+                  overflow: "hidden",
+                  zIndex: 50,
+                  minWidth: 130,
+                }}
+              >
+                {[
+                  { fmt: "pdf", label: "PDF로 저장" },
+                  { fmt: "html", label: "HTML로 저장" },
+                  { fmt: "txt", label: "TXT로 저장" },
+                ].map(({ fmt, label }) => (
+                  <button
+                    key={fmt}
+                    onClick={() => {
+                      exportConversation(fmt);
+                      setShowExportMenu(false);
+                    }}
+                    style={{
+                      display: "block",
+                      width: "100%",
+                      textAlign: "left",
+                      padding: "9px 14px",
+                      background: "none",
+                      border: "none",
+                      color: C.ink,
+                      fontSize: 13,
+                      cursor: "pointer",
+                      fontFamily: sans,
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = C.accentSoft)}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <GhostBtn onClick={clearConversation}>초기화</GhostBtn>
         </div>
       )}
