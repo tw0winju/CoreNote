@@ -785,11 +785,30 @@ app.post("/api/summary", async (req, res) => {
     const chunks = await table.query().where(`docId = '${docId}'`).toArray();
     if (!chunks.length) return res.status(404).json({ error: "문서를 찾을 수 없어요." });
     chunks.sort((a, b) => a.index - b.index);
-    const text = chunks.slice(0, 6).map((c) => c.text).join("\n\n").slice(0, 3000);
-    const prompt = `다음 내용의 핵심을 3~5개의 bullet point로 요약해줘.
-마크다운 형식(- 으로 시작), <think> 없이 바로 출력.
 
-${text}`;
+    // 인접 청크 overlap 제거
+    const textParts = chunks.map((chunk, i) => {
+      if (i === 0) return chunk.text;
+      const prev = chunks[i - 1];
+      if (chunk.index !== prev.index + 1) return chunk.text;
+      const sepIdx = chunk.text.indexOf("\n\n");
+      if (sepIdx !== -1 && sepIdx <= OVERLAP_CHARS + 2) return chunk.text.slice(sepIdx + 2);
+      return chunk.text;
+    });
+    const text = textParts.join("\n\n").slice(0, 16000);
+
+    const prompt = `아래는 문서 전체 내용이다. 이 내용을 빠짐없이 포괄하는 상세 요약을 작성해.
+
+요약 규칙:
+1. 문서에 등장하는 모든 주요 주제·개념·항목을 반드시 포함한다.
+2. 소제목(##)으로 섹션을 나누고, 각 섹션 아래에 핵심 내용을 bullet(-)로 나열한다.
+3. 중요 수치·용어·예시는 그대로 유지한다.
+4. 내용을 임의로 줄이거나 생략하지 않는다.
+5. <think> 태그 없이 바로 마크다운으로 출력한다.
+
+---
+${text}
+---`;
     const r = await ollamaFetch("/api/chat", {
       model: settings.chatModel,
       messages: [{ role: "user", content: prompt }],
