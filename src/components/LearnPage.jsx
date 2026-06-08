@@ -519,7 +519,7 @@ function QuestionCard({ idx, q, quizType, answer, setAnswer, submitted, showHint
 
 function QuizPanel({ docs, folders }) {
   const [selectedDocId, setSelectedDocId] = useState("");
-  const [quizType, setQuizType] = useState("mc");
+  const [selectedTypes, setSelectedTypes] = useState(new Set(["mc"]));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [questions, setQuestions] = useState([]);
@@ -540,8 +540,14 @@ function QuizPanel({ docs, folders }) {
     setError("");
   };
 
-  const selectType = (t) => {
-    setQuizType(t);
+  const toggleType = (id) => {
+    setSelectedTypes((prev) => {
+      if (prev.has(id) && prev.size === 1) return prev;
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
     reset();
     setError("");
   };
@@ -552,7 +558,7 @@ function QuizPanel({ docs, folders }) {
     setError("");
     reset();
     try {
-      const data = await postQuiz(selectedDocId, 10, quizType);
+      const data = await postQuiz(selectedDocId, 10, [...selectedTypes]);
       if (data.error) throw new Error(data.error);
       if (!data.questions?.length) throw new Error("퀴즈를 생성하지 못했어요.");
       setQuestions(data.questions);
@@ -563,14 +569,19 @@ function QuizPanel({ docs, folders }) {
     }
   };
 
-  const gradeable = quizType !== "sa";
+  const gradableQs = questions.filter((q) => q.type !== "sa");
+  const hasGradable = gradableQs.length > 0;
+  const hasSa = questions.some((q) => q.type === "sa");
   const allAnswered =
     questions.length > 0 &&
     questions.every((_, i) => answers[i] !== undefined && answers[i] !== "");
-  const correctCount =
-    gradeable && submitted
-      ? questions.filter((q, i) => answers[i]?.toUpperCase() === q.a?.toUpperCase()).length
-      : 0;
+  const correctCount = submitted
+    ? questions.filter(
+        (q, i) => q.type !== "sa" && answers[i]?.toUpperCase() === q.a?.toUpperCase(),
+      ).length
+    : 0;
+
+  const submitLabel = !hasGradable ? "정답 보기" : "채점하기";
 
   return (
     <div style={{ display: "flex", gap: 14, height: "100%", overflow: "hidden" }}>
@@ -585,7 +596,7 @@ function QuizPanel({ docs, folders }) {
           overflowY: "auto",
         }}
       >
-        {/* 유형 선택 */}
+        {/* 유형 다중 선택 */}
         <div>
           <div
             style={{
@@ -597,30 +608,53 @@ function QuizPanel({ docs, folders }) {
               marginBottom: 6,
             }}
           >
-            유형
+            유형 (중복 선택 가능)
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            {QUIZ_TYPES.map(({ id, label }) => (
-              <button
-                key={id}
-                onClick={() => selectType(id)}
-                style={{
-                  border: `1px solid ${quizType === id ? C.accent : C.line}`,
-                  background: quizType === id ? C.accentSoft : "transparent",
-                  color: quizType === id ? C.accent : C.inkSoft,
-                  borderRadius: 7,
-                  padding: "6px 12px",
-                  fontSize: 13,
-                  fontFamily: sans,
-                  fontWeight: quizType === id ? 600 : 400,
-                  cursor: "pointer",
-                  textAlign: "left",
-                  transition: "all .15s",
-                }}
-              >
-                {label}
-              </button>
-            ))}
+            {QUIZ_TYPES.map(({ id, label }) => {
+              const active = selectedTypes.has(id);
+              return (
+                <button
+                  key={id}
+                  onClick={() => toggleType(id)}
+                  style={{
+                    border: `1px solid ${active ? C.accent : C.line}`,
+                    background: active ? C.accentSoft : "transparent",
+                    color: active ? C.accent : C.inkSoft,
+                    borderRadius: 7,
+                    padding: "6px 12px",
+                    fontSize: 13,
+                    fontFamily: sans,
+                    fontWeight: active ? 600 : 400,
+                    cursor: "pointer",
+                    textAlign: "left",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 7,
+                    transition: "all .15s",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 14,
+                      height: 14,
+                      flexShrink: 0,
+                      borderRadius: 3,
+                      border: `1.5px solid ${active ? C.accent : C.line}`,
+                      background: active ? C.accent : "transparent",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 9,
+                      color: "#fff",
+                    }}
+                  >
+                    {active ? "✓" : ""}
+                  </span>
+                  {label}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -756,36 +790,34 @@ function QuizPanel({ docs, folders }) {
                   flexShrink: 0,
                   marginBottom: 12,
                   padding: "10px 16px",
-                  background: !gradeable
-                    ? C.paper2
-                    : correctCount === questions.length
-                      ? GREEN
-                      : C.paper2,
-                  border: `1px solid ${!gradeable ? C.line : correctCount === questions.length ? GREEN_BORDER : C.line}`,
+                  background: hasGradable && correctCount === gradableQs.length ? GREEN : C.paper2,
+                  border: `1px solid ${hasGradable && correctCount === gradableQs.length ? GREEN_BORDER : C.line}`,
                   borderRadius: 10,
                   display: "flex",
                   alignItems: "center",
                   gap: 10,
                 }}
               >
-                {gradeable ? (
+                {hasGradable ? (
                   <>
                     <span style={{ fontSize: 20 }}>
-                      {correctCount === questions.length
+                      {correctCount === gradableQs.length
                         ? "🎉"
-                        : correctCount >= questions.length / 2
+                        : correctCount >= gradableQs.length / 2
                           ? "👍"
                           : "📚"}
                     </span>
                     <span style={{ fontSize: 15, fontWeight: 700, color: C.ink }}>
-                      {correctCount} / {questions.length}
+                      {correctCount} / {gradableQs.length}
                     </span>
                     <span style={{ fontSize: 13, color: C.inkSoft }}>
-                      {correctCount === questions.length
+                      {correctCount === gradableQs.length
                         ? "완벽해요!"
-                        : correctCount >= questions.length / 2
+                        : correctCount >= gradableQs.length / 2
                           ? "잘 하고 있어요!"
                           : "조금 더 복습해봐요!"}
+                      {hasSa &&
+                        ` · 주관식 ${questions.filter((q) => q.type === "sa").length}문제는 직접 확인`}
                     </span>
                   </>
                 ) : (
@@ -844,7 +876,7 @@ function QuizPanel({ docs, folders }) {
                   key={i}
                   idx={i}
                   q={q}
-                  quizType={quizType}
+                  quizType={q.type}
                   answer={answers[i]}
                   setAnswer={(v) => setAnswers((prev) => ({ ...prev, [i]: v }))}
                   submitted={submitted}
@@ -873,7 +905,7 @@ function QuizPanel({ docs, folders }) {
                     transition: "all .15s",
                   }}
                 >
-                  {quizType === "sa" ? "정답 보기" : "채점하기"}
+                  {submitLabel}
                 </button>
               )}
               <div style={{ height: 8, flexShrink: 0 }} />

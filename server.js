@@ -819,8 +819,33 @@ app.post("/api/memories/extract", async (req, res) => {
 });
 
 // ---------- 퀴즈 생성 ----------
+async function generateQuizQuestions(type, count, text) {
+  const prompt =
+    type === "tf"
+      ? quizTfPrompt(count, text)
+      : type === "sa"
+        ? quizSaPrompt(count, text)
+        : quizMcPrompt(count, text);
+  try {
+    const cleaned = await ollamaGenerate([{ role: "user", content: prompt }], { temperature: 0.4 });
+    const match = cleaned.match(/\[[\s\S]*\]/);
+    if (!match) return [];
+    return JSON.parse(match[0])
+      .filter((q) => {
+        if (!q.q || !q.a) return false;
+        if (type === "mc" && !q.options?.length) return false;
+        return true;
+      })
+      .slice(0, count)
+      .map((q) => ({ ...q, type }));
+  } catch {
+    return [];
+  }
+}
+
 app.post("/api/quiz", async (req, res) => {
-  const { docId, count = 10, type = "mc" } = req.body;
+  const { docId, count = 10 } = req.body;
+  const types = Array.isArray(req.body.types) && req.body.types.length ? req.body.types : ["mc"];
   if (!docId) return res.status(400).json({ error: "docId가 필요합니다." });
   try {
     const table = await getTable();
@@ -834,20 +859,17 @@ app.post("/api/quiz", async (req, res) => {
       .map((c) => c.text)
       .join("\n\n")
       .slice(0, 4500);
-    const prompt =
-      type === "tf" ? quizTfPrompt(count, text) :
-      type === "sa" ? quizSaPrompt(count, text) :
-      quizMcPrompt(count, text);
-    const cleaned = await ollamaGenerate([{ role: "user", content: prompt }], { temperature: 0.4 });
-    const match = cleaned.match(/\[[\s\S]*\]/);
-    if (!match) return res.status(502).json({ error: "퀴즈 파싱 실패" });
-    const questions = JSON.parse(match[0])
-      .filter((q) => {
-        if (!q.q || !q.a) return false;
-        if (type === "mc" && !q.options?.length) return false;
-        return true;
-      })
-      .slice(0, count);
+
+    const base = Math.floor(count / types.length);
+    const extra = count % types.length;
+    const perType = types.map((_, i) => base + (i < extra ? 1 : 0));
+
+    const results = await Promise.all(
+      types.map((t, i) => generateQuizQuestions(t, perType[i], text)),
+    );
+    const questions = results.flat().sort(() => Math.random() - 0.5);
+
+    if (!questions.length) return res.status(502).json({ error: "퀴즈를 생성하지 못했어요." });
     res.json({ questions });
   } catch (e) {
     res.status(502).json({ error: e.message || "퀴즈 생성 중 오류" });
