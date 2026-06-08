@@ -1,4 +1,4 @@
-import { C, sans } from "../theme";
+import { sans } from "../theme";
 
 export default function WarningBanner({ health }) {
   if (!health || (health.ollama && health.chatInstalled && health.embedInstalled)) return null;

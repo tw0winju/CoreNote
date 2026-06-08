@@ -15,7 +15,6 @@ import {
   quizPrompt,
   summaryPrompt,
   batchSummaryPrompt,
-  mergeSummaryPrompt,
   ragPrompt,
   ragFullContextPrompt,
 } from "./prompts.js";
@@ -94,8 +93,7 @@ function saveDocs() {
 // ---------- 요약 캐시 ----------
 function loadSummaries() {
   try {
-    if (fs.existsSync(SUMMARIES_PATH))
-      return JSON.parse(fs.readFileSync(SUMMARIES_PATH, "utf8"));
+    if (fs.existsSync(SUMMARIES_PATH)) return JSON.parse(fs.readFileSync(SUMMARIES_PATH, "utf8"));
   } catch {}
   return {};
 }
@@ -309,7 +307,8 @@ async function ollamaGenerate(messages, options = {}) {
   }
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
-  let buf = "", content = "";
+  let buf = "",
+    content = "";
   try {
     while (true) {
       const { done, value } = await reader.read();
@@ -419,10 +418,7 @@ async function llmRerank(question, candidates) {
   const listing = candidates.map((c, i) => `[${i + 1}] ${c.text.slice(0, 300)}`).join("\n\n");
   const prompt = rerankPrompt(question, listing);
   try {
-    const raw = await ollamaGenerate(
-      [{ role: "user", content: prompt }],
-      { temperature: 0 },
-    );
+    const raw = await ollamaGenerate([{ role: "user", content: prompt }], { temperature: 0 });
     const order = raw
       .match(/\d+/g)
       ?.map(Number)
@@ -773,10 +769,7 @@ app.post("/api/memories/extract", async (req, res) => {
   try {
     const prompt = memoryExtractPrompt(q, a);
 
-    const cleaned = await ollamaGenerate(
-      [{ role: "user", content: prompt }],
-      { temperature: 0.1 },
-    );
+    const cleaned = await ollamaGenerate([{ role: "user", content: prompt }], { temperature: 0.1 });
     const match = cleaned.match(/\[[\s\S]*\]/);
     if (!match) return res.json({ extracted: [] });
 
@@ -816,10 +809,7 @@ app.post("/api/quiz", async (req, res) => {
       .join("\n\n")
       .slice(0, 3000);
     const prompt = quizPrompt(count, text);
-    const cleaned = await ollamaGenerate(
-      [{ role: "user", content: prompt }],
-      { temperature: 0.3 },
-    );
+    const cleaned = await ollamaGenerate([{ role: "user", content: prompt }], { temperature: 0.3 });
     const match = cleaned.match(/\[[\s\S]*\]/);
     if (!match) return res.status(502).json({ error: "퀴즈 파싱 실패" });
     const questions = JSON.parse(match[0])
@@ -853,10 +843,16 @@ app.post("/api/summary", async (req, res) => {
 
   try {
     const table = await getTable();
-    if (!table) { send({ type: "error", error: "문서를 찾을 수 없어요." }); return res.end(); }
+    if (!table) {
+      send({ type: "error", error: "문서를 찾을 수 없어요." });
+      return res.end();
+    }
 
     const chunks = await table.query().where(`docId = '${docId}'`).toArray();
-    if (!chunks.length) { send({ type: "error", error: "문서를 찾을 수 없어요." }); return res.end(); }
+    if (!chunks.length) {
+      send({ type: "error", error: "문서를 찾을 수 없어요." });
+      return res.end();
+    }
     chunks.sort((a, b) => a.index - b.index);
 
     // 인접 청크 overlap 제거
@@ -871,7 +867,8 @@ app.post("/api/summary", async (req, res) => {
 
     // 배치 분할
     const batches = [];
-    let cur = [], curLen = 0;
+    let cur = [],
+      curLen = 0;
     for (const part of textParts) {
       if (curLen + part.length > SUMMARY_BATCH_CHARS && cur.length > 0) {
         batches.push(cur.join("\n\n"));
@@ -1089,7 +1086,10 @@ app.post("/api/ask", async (req, res) => {
     if (settings.hydeEnabled) {
       try {
         const hydeText = await ollamaGenerate(
-          [{ role: "system", content: HYDE_SYSTEM_PROMPT }, { role: "user", content: question }],
+          [
+            { role: "system", content: HYDE_SYSTEM_PROMPT },
+            { role: "user", content: question },
+          ],
           { temperature: 0.5 },
         );
         if (hydeText) queryText = hydeText;

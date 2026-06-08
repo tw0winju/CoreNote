@@ -4,17 +4,32 @@ import MemoryPanel from "./MemoryPanel";
 
 export default function SessionSidebar({ chat, memory, page, setPage }) {
   const {
-    conversation, sessions,
-    loadSession, deleteSession, clearConversation,
-    saveSession, savingName, setSavingName,
-    showSaveInput, setShowSaveInput,
+    conversation,
+    sessions,
+    loadSession,
+    deleteSession,
+    clearConversation,
+    saveSession,
+    savingName,
+    setSavingName,
+    showSaveInput,
+    setShowSaveInput,
   } = chat;
 
   const [activeId, setActiveId] = useState(null);
 
-  const handleLoad = (s) => { loadSession(s); setActiveId(s.id); };
-  const handleNew  = () => { clearConversation(); setActiveId(null); };
-  const handleSave = () => { saveSession(); setActiveId(null); };
+  const handleLoad = (s) => {
+    loadSession(s);
+    setActiveId(s.id);
+  };
+  const handleNew = () => {
+    clearConversation();
+    setActiveId(null);
+  };
+  const handleSave = () => {
+    saveSession();
+    setActiveId(null);
+  };
 
   return (
     <div
@@ -29,13 +44,26 @@ export default function SessionSidebar({ chat, memory, page, setPage }) {
       }}
     >
       {/* 로고 */}
-      <div style={{ padding: "18px 16px 12px", display: "flex", alignItems: "center", gap: 9, flexShrink: 0 }}>
+      <div
+        style={{
+          padding: "18px 16px 12px",
+          display: "flex",
+          alignItems: "center",
+          gap: 9,
+          flexShrink: 0,
+        }}
+      >
         <div
           style={{
-            width: 30, height: 30, borderRadius: 9,
+            width: 30,
+            height: 30,
+            borderRadius: 9,
             background: C.accent,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontSize: 15, flexShrink: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 15,
+            flexShrink: 0,
           }}
         >
           📖
@@ -48,7 +76,7 @@ export default function SessionSidebar({ chat, memory, page, setPage }) {
       {/* 페이지 탭 */}
       <div style={{ padding: "0 8px 6px", flexShrink: 0 }}>
         {[
-          { key: "main",  icon: "💬", label: "대화" },
+          { key: "main", icon: "💬", label: "대화" },
           { key: "learn", icon: "📖", label: "학습" },
         ].map(({ key, icon, label }) => {
           const active = page === key;
@@ -129,7 +157,10 @@ export default function SessionSidebar({ chat, memory, page, setPage }) {
               onChange={(e) => setSavingName(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleSave();
-                if (e.key === "Escape") { setShowSaveInput(false); setSavingName(""); }
+                if (e.key === "Escape") {
+                  setShowSaveInput(false);
+                  setSavingName("");
+                }
               }}
               placeholder="세션 이름 (Enter)"
               style={{
@@ -148,18 +179,38 @@ export default function SessionSidebar({ chat, memory, page, setPage }) {
               <button
                 onClick={handleSave}
                 style={{
-                  flex: 1, border: "none", background: C.accent, color: "#fff",
-                  padding: "4px 0", borderRadius: 6, fontSize: 12, cursor: "pointer", fontFamily: sans,
+                  flex: 1,
+                  border: "none",
+                  background: C.accent,
+                  color: "#fff",
+                  padding: "4px 0",
+                  borderRadius: 6,
+                  fontSize: 12,
+                  cursor: "pointer",
+                  fontFamily: sans,
                 }}
-              >저장</button>
+              >
+                저장
+              </button>
               <button
-                onClick={() => { setShowSaveInput(false); setSavingName(""); }}
-                style={{
-                  flex: 1, border: "1px solid rgba(255,255,255,0.1)", background: "transparent",
-                  color: C.sidebarSoft, padding: "4px 0", borderRadius: 6,
-                  fontSize: 12, cursor: "pointer", fontFamily: sans,
+                onClick={() => {
+                  setShowSaveInput(false);
+                  setSavingName("");
                 }}
-              >취소</button>
+                style={{
+                  flex: 1,
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  background: "transparent",
+                  color: C.sidebarSoft,
+                  padding: "4px 0",
+                  borderRadius: 6,
+                  fontSize: 12,
+                  cursor: "pointer",
+                  fontFamily: sans,
+                }}
+              >
+                취소
+              </button>
             </div>
           </div>
         )}
@@ -172,8 +223,10 @@ export default function SessionSidebar({ chat, memory, page, setPage }) {
                 key={s.id}
                 label={s.name}
                 sub={new Date(s.savedAt).toLocaleString("ko-KR", {
-                  month: "numeric", day: "numeric",
-                  hour: "2-digit", minute: "2-digit",
+                  month: "numeric",
+                  day: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
                 })}
                 isActive={activeId === s.id}
                 onClick={() => handleLoad(s)}
@@ -184,7 +237,14 @@ export default function SessionSidebar({ chat, memory, page, setPage }) {
         )}
 
         {sessions.length === 0 && conversation.length === 0 && (
-          <div style={{ fontSize: 11.5, color: "rgba(255,255,255,0.22)", padding: "10px 6px", lineHeight: 1.65 }}>
+          <div
+            style={{
+              fontSize: 11.5,
+              color: "rgba(255,255,255,0.22)",
+              padding: "10px 6px",
+              lineHeight: 1.65,
+            }}
+          >
             대화 후 💾로 저장하면 여기에 표시돼요.
           </div>
         )}
@@ -239,33 +299,54 @@ function SessionItem({ label, sub, isActive, onClick, onDelete, onSave, showSave
 
       {showSaveIcon && (hovered || isActive) && (
         <button
-          onClick={(e) => { e.stopPropagation(); onSave(); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onSave();
+          }}
           title="세션 저장"
           style={{
-            border: "none", background: "transparent",
-            fontSize: 12, cursor: "pointer", padding: "1px 3px",
-            color: "rgba(255,255,255,0.35)", flexShrink: 0,
+            border: "none",
+            background: "transparent",
+            fontSize: 12,
+            cursor: "pointer",
+            padding: "1px 3px",
+            color: "rgba(255,255,255,0.35)",
+            flexShrink: 0,
           }}
-        >💾</button>
+        >
+          💾
+        </button>
       )}
 
       {onDelete && hovered && (
         <button
-          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
           title="삭제"
           style={{
-            border: "none", background: "transparent",
-            color: "rgba(255,255,255,0.3)", fontSize: 14,
-            lineHeight: 1, cursor: "pointer", padding: "0 2px", flexShrink: 0,
+            border: "none",
+            background: "transparent",
+            color: "rgba(255,255,255,0.3)",
+            fontSize: 14,
+            lineHeight: 1,
+            cursor: "pointer",
+            padding: "0 2px",
+            flexShrink: 0,
           }}
-        >×</button>
+        >
+          ×
+        </button>
       )}
     </div>
   );
 }
 
 function Divider() {
-  return <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "2px 12px 6px" }} />;
+  return (
+    <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "2px 12px 6px" }} />
+  );
 }
 
 function SectionLabel({ children }) {

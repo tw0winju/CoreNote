@@ -13,9 +13,7 @@ import Chat from "./Chat";
 import LearnPage from "./LearnPage";
 
 export default function App() {
-  const [darkMode, setDarkMode] = useState(
-    () => localStorage.getItem("corenote_theme") === "dark",
-  );
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem("corenote_theme") === "dark");
   const [page, setPage] = useState("main");
 
   useEffect(() => {
@@ -23,17 +21,25 @@ export default function App() {
     localStorage.setItem("corenote_theme", darkMode ? "dark" : "light");
   }, [darkMode]);
 
-  const docsHook     = useDocs();
+  const docsHook = useDocs();
   const settingsHook = useSettings(docsHook.loadHealth);
   const indexingHook = useIndexing(async () => {
     await docsHook.loadDocs();
     await docsHook.loadHealth();
   });
   const memoryHook = useMemory();
-  const chatHook   = useChat(memoryHook.refresh);
+  const chatHook = useChat(memoryHook.refresh);
 
   return (
-    <div style={{ fontFamily: sans, color: C.ink, height: "100vh", display: "flex", overflow: "hidden" }}>
+    <div
+      style={{
+        fontFamily: sans,
+        color: C.ink,
+        height: "100vh",
+        display: "flex",
+        overflow: "hidden",
+      }}
+    >
       {settingsHook.showSettings && settingsHook.settingsForm && (
         <SettingsModal
           form={settingsHook.settingsForm}
@@ -43,15 +49,18 @@ export default function App() {
         />
       )}
 
-      <SessionSidebar
-        chat={chatHook}
-        memory={memoryHook}
-        page={page}
-        setPage={setPage}
-      />
+      <SessionSidebar chat={chatHook} memory={memoryHook} page={page} setPage={setPage} />
 
       {/* 메인 콘텐츠 */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: C.paper }}>
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          background: C.paper,
+        }}
+      >
         {/* 상단바 */}
         <div
           style={{

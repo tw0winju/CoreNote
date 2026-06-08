@@ -15,7 +15,10 @@ function processCitations(children, onCitationClick) {
           return (
             <sup
               key={`${ci}-${i}`}
-              onClick={(e) => { e.stopPropagation(); onCitationClick(Number(m[1])); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onCitationClick(Number(m[1]));
+              }}
               title={`출처 ${m[1]} 보기`}
               style={{ color: C.accent, fontWeight: 700, cursor: "pointer", userSelect: "none" }}
             >
@@ -32,48 +35,104 @@ function processCitations(children, onCitationClick) {
 
 function highlight(text, query) {
   if (!query || !text) return text;
-  const words = query.trim().split(/\s+/).filter((w) => w.length > 1);
+  const words = query
+    .trim()
+    .split(/\s+/)
+    .filter((w) => w.length > 1);
   if (!words.length) return text;
   const escaped = words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
   const pattern = new RegExp(`(${escaped.join("|")})`, "gi");
   return text.split(pattern).map((part, i) =>
     i % 2 === 1 ? (
-      <mark key={i} style={{ background: C.accentSoft, color: C.accent, borderRadius: 2, padding: "0 1px" }}>
+      <mark
+        key={i}
+        style={{ background: C.accentSoft, color: C.accent, borderRadius: 2, padding: "0 1px" }}
+      >
         {part}
       </mark>
-    ) : part,
+    ) : (
+      part
+    ),
   );
 }
 
 const mdComponents = (onCitationClick) => ({
-  p:  ({ children }) => <p style={{ margin: "0 0 8px", lineHeight: 1.75 }}>{processCitations(children, onCitationClick)}</p>,
-  li: ({ children }) => <li style={{ margin: "2px 0", lineHeight: 1.65 }}>{processCitations(children, onCitationClick)}</li>,
+  p: ({ children }) => (
+    <p style={{ margin: "0 0 8px", lineHeight: 1.75 }}>
+      {processCitations(children, onCitationClick)}
+    </p>
+  ),
+  li: ({ children }) => (
+    <li style={{ margin: "2px 0", lineHeight: 1.65 }}>
+      {processCitations(children, onCitationClick)}
+    </li>
+  ),
   ul: ({ children }) => <ul style={{ paddingLeft: 20, margin: "4px 0 8px" }}>{children}</ul>,
   ol: ({ children }) => <ol style={{ paddingLeft: 20, margin: "4px 0 8px" }}>{children}</ol>,
-  h1: ({ children }) => <h1 style={{ fontSize: 17, fontWeight: 700, margin: "14px 0 6px" }}>{children}</h1>,
-  h2: ({ children }) => <h2 style={{ fontSize: 15, fontWeight: 700, margin: "12px 0 5px" }}>{children}</h2>,
-  h3: ({ children }) => <h3 style={{ fontSize: 14, fontWeight: 600, margin: "10px 0 4px" }}>{children}</h3>,
+  h1: ({ children }) => (
+    <h1 style={{ fontSize: 17, fontWeight: 700, margin: "14px 0 6px" }}>{children}</h1>
+  ),
+  h2: ({ children }) => (
+    <h2 style={{ fontSize: 15, fontWeight: 700, margin: "12px 0 5px" }}>{children}</h2>
+  ),
+  h3: ({ children }) => (
+    <h3 style={{ fontSize: 14, fontWeight: 600, margin: "10px 0 4px" }}>{children}</h3>
+  ),
   blockquote: ({ children }) => (
-    <blockquote style={{ borderLeft: `3px solid ${C.accentSoft}`, paddingLeft: 12, margin: "8px 0", color: C.inkSoft }}>
+    <blockquote
+      style={{
+        borderLeft: `3px solid ${C.accentSoft}`,
+        paddingLeft: 12,
+        margin: "8px 0",
+        color: C.inkSoft,
+      }}
+    >
       {children}
     </blockquote>
   ),
   code: ({ inline, children }) =>
     inline ? (
-      <code style={{ background: C.paper2, padding: "1px 5px", borderRadius: 4, fontSize: "0.88em", fontFamily: "monospace" }}>
+      <code
+        style={{
+          background: C.paper2,
+          padding: "1px 5px",
+          borderRadius: 4,
+          fontSize: "0.88em",
+          fontFamily: "monospace",
+        }}
+      >
         {children}
       </code>
     ) : (
-      <pre style={{ background: C.paper2, padding: "12px 14px", borderRadius: "var(--radius-sm)", overflowX: "auto", margin: "8px 0" }}>
+      <pre
+        style={{
+          background: C.paper2,
+          padding: "12px 14px",
+          borderRadius: "var(--radius-sm)",
+          overflowX: "auto",
+          margin: "8px 0",
+        }}
+      >
         <code style={{ fontFamily: "monospace", fontSize: 13, lineHeight: 1.5 }}>{children}</code>
       </pre>
     ),
-  pre:   ({ children }) => <>{children}</>,
+  pre: ({ children }) => <>{children}</>,
   table: ({ children }) => (
-    <table style={{ borderCollapse: "collapse", width: "100%", margin: "8px 0", fontSize: 13 }}>{children}</table>
+    <table style={{ borderCollapse: "collapse", width: "100%", margin: "8px 0", fontSize: 13 }}>
+      {children}
+    </table>
   ),
   th: ({ children }) => (
-    <th style={{ border: `1px solid ${C.line}`, padding: "4px 8px", background: C.paper2, fontWeight: 600 }}>{children}</th>
+    <th
+      style={{
+        border: `1px solid ${C.line}`,
+        padding: "4px 8px",
+        background: C.paper2,
+        fontWeight: 600,
+      }}
+    >
+      {children}
+    </th>
   ),
   td: ({ children }) => (
     <td style={{ border: `1px solid ${C.line}`, padding: "4px 8px" }}>{children}</td>
@@ -100,7 +159,9 @@ function AnswerBubble({ text, id, copiedKey, onCopy, streaming, onCitationClick 
       <button
         onClick={() => onCopy(text, id)}
         style={{
-          position: "absolute", top: 8, right: 8,
+          position: "absolute",
+          top: 8,
+          right: 8,
           border: `1px solid ${C.line}`,
           background: C.paper,
           color: C.inkSoft,
@@ -146,7 +207,15 @@ function SourceCard({ s, isOpen, onToggle, query }) {
         >
           {s.n}
         </span>
-        <span style={{ fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
+        <span
+          style={{
+            fontWeight: 500,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            flex: 1,
+          }}
+        >
           {s.docName}
         </span>
         <span style={{ marginLeft: "auto", color: C.inkSoft, fontSize: 11, flexShrink: 0 }}>
@@ -156,9 +225,12 @@ function SourceCard({ s, isOpen, onToggle, query }) {
       {isOpen && (
         <div
           style={{
-            marginTop: 7, paddingTop: 7,
+            marginTop: 7,
+            paddingTop: 7,
             borderTop: `1px dashed ${C.line}`,
-            fontSize: 12.5, color: C.inkSoft, lineHeight: 1.6,
+            fontSize: 12.5,
+            color: C.inkSoft,
+            lineHeight: 1.6,
           }}
         >
           {highlight(s.snippet, query)}…
@@ -176,7 +248,8 @@ function ThinkingDots() {
         <span
           key={i}
           style={{
-            width: 7, height: 7,
+            width: 7,
+            height: 7,
             borderRadius: "50%",
             background: C.accent,
             display: "inline-block",
@@ -191,13 +264,31 @@ function ThinkingDots() {
 // ── Chat ─────────────────────────────────────────────────────────────────────
 export default function Chat({ chat, docs: docsHook }) {
   const {
-    question, setQuestion, asking, askError, result,
-    openSrc, setOpenSrc, conversation, openConvSrc, setOpenConvSrc,
-    copiedKey, copyText, exportConversation, clearConversation,
-    ask, regenerate, navigateHistory, scrollRef,
-    toggleFavorite, isFavorited,
-    attachedImage, setAttachedImage, cancelAsk,
-    fullContext, setFullContext,
+    question,
+    setQuestion,
+    asking,
+    askError,
+    result,
+    openSrc,
+    setOpenSrc,
+    conversation,
+    openConvSrc,
+    setOpenConvSrc,
+    copiedKey,
+    copyText,
+    exportConversation,
+    clearConversation,
+    ask,
+    regenerate,
+    navigateHistory,
+    scrollRef,
+    toggleFavorite,
+    isFavorited,
+    attachedImage,
+    setAttachedImage,
+    cancelAsk,
+    fullContext,
+    setFullContext,
   } = chat;
 
   const { selectedDocs, docs, setSelectedDocs } = docsHook;
@@ -221,8 +312,10 @@ export default function Chat({ chat, docs: docsHook }) {
   return (
     <section
       style={{
-        flex: 1, minWidth: 0,
-        display: "flex", flexDirection: "column",
+        flex: 1,
+        minWidth: 0,
+        display: "flex",
+        flexDirection: "column",
         overflow: "hidden",
         background: C.card,
         borderRadius: "var(--radius-lg)",
@@ -234,14 +327,19 @@ export default function Chat({ chat, docs: docsHook }) {
         <div
           onClick={() => setLightbox(null)}
           style={{
-            position: "fixed", inset: 0, zIndex: 200,
+            position: "fixed",
+            inset: 0,
+            zIndex: 200,
             background: "rgba(0,0,0,0.85)",
-            display: "flex", alignItems: "center", justifyContent: "center",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
             cursor: "zoom-out",
           }}
         >
           <img
-            src={lightbox} alt="확대"
+            src={lightbox}
+            alt="확대"
             style={{ maxWidth: "90vw", maxHeight: "90vh", borderRadius: 12, objectFit: "contain" }}
           />
         </div>
@@ -267,9 +365,12 @@ export default function Chat({ chat, docs: docsHook }) {
       <div
         ref={scrollRef}
         style={{
-          flex: 1, overflowY: "auto",
+          flex: 1,
+          overflowY: "auto",
           padding: "16px 20px",
-          display: "flex", flexDirection: "column", gap: 20,
+          display: "flex",
+          flexDirection: "column",
+          gap: 20,
         }}
       >
         {conversation.length === 0 && !asking && !result && (
@@ -306,12 +407,17 @@ export default function Chat({ chat, docs: docsHook }) {
                 >
                   {item.image && (
                     <img
-                      src={item.image} alt="첨부"
+                      src={item.image}
+                      alt="첨부"
                       onClick={() => setLightbox(item.image)}
                       style={{
-                        display: "block", maxWidth: "100%", maxHeight: 160,
-                        borderRadius: 8, marginBottom: 7,
-                        objectFit: "contain", cursor: "zoom-in",
+                        display: "block",
+                        maxWidth: "100%",
+                        maxHeight: 160,
+                        borderRadius: 8,
+                        marginBottom: 7,
+                        objectFit: "contain",
+                        cursor: "zoom-in",
                         opacity: 0.92,
                       }}
                     />
@@ -348,11 +454,17 @@ export default function Chat({ chat, docs: docsHook }) {
               {item.sources?.length > 0 && (
                 <div>
                   <button
-                    onClick={() => setOpenConvSrc(openConvSrc?.turn === idx ? null : { turn: idx, srcN: null })}
+                    onClick={() =>
+                      setOpenConvSrc(openConvSrc?.turn === idx ? null : { turn: idx, srcN: null })
+                    }
                     style={{
-                      border: "none", background: "transparent",
-                      color: C.inkSoft, fontSize: 12, cursor: "pointer",
-                      padding: "2px 4px", fontFamily: sans,
+                      border: "none",
+                      background: "transparent",
+                      color: C.inkSoft,
+                      fontSize: 12,
+                      cursor: "pointer",
+                      padding: "2px 4px",
+                      fontFamily: sans,
                     }}
                   >
                     출처 {item.sources.length}개 {openConvSrc?.turn === idx ? "▲" : "▼"}
@@ -361,9 +473,16 @@ export default function Chat({ chat, docs: docsHook }) {
                     <div style={{ display: "grid", gap: 5, marginTop: 6 }}>
                       {item.sources.map((s) => (
                         <SourceCard
-                          key={s.n} s={s} query={item.q}
+                          key={s.n}
+                          s={s}
+                          query={item.q}
                           isOpen={openConvSrc?.srcN === s.n}
-                          onToggle={() => setOpenConvSrc({ turn: idx, srcN: openConvSrc?.srcN === s.n ? null : s.n })}
+                          onToggle={() =>
+                            setOpenConvSrc({
+                              turn: idx,
+                              srcN: openConvSrc?.srcN === s.n ? null : s.n,
+                            })
+                          }
                         />
                       ))}
                     </div>
@@ -426,13 +545,23 @@ export default function Chat({ chat, docs: docsHook }) {
             />
             {result.sources?.length > 0 && (
               <div>
-                <div style={{ fontSize: 12, color: C.inkSoft, marginBottom: 5, fontWeight: 600, paddingLeft: 2 }}>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: C.inkSoft,
+                    marginBottom: 5,
+                    fontWeight: 600,
+                    paddingLeft: 2,
+                  }}
+                >
                   출처
                 </div>
                 <div style={{ display: "grid", gap: 5 }}>
                   {result.sources.map((s) => (
                     <SourceCard
-                      key={s.n} s={s} query={question}
+                      key={s.n}
+                      s={s}
+                      query={question}
                       isOpen={openSrc === s.n}
                       onToggle={() => setOpenSrc(openSrc === s.n ? null : s.n)}
                     />
@@ -504,7 +633,8 @@ export default function Chat({ chat, docs: docsHook }) {
               src={attachedImage.preview}
               alt="첨부"
               style={{
-                maxHeight: 90, maxWidth: 160,
+                maxHeight: 90,
+                maxWidth: 160,
                 borderRadius: "var(--radius-sm)",
                 border: `1px solid ${C.line}`,
                 objectFit: "contain",
@@ -514,17 +644,35 @@ export default function Chat({ chat, docs: docsHook }) {
             <button
               onClick={() => setAttachedImage(null)}
               style={{
-                position: "absolute", top: -6, right: -6,
-                width: 18, height: 18, borderRadius: "50%",
-                border: "none", background: C.inkSoft, color: C.paper,
-                fontSize: 11, lineHeight: 1, cursor: "pointer", padding: 0,
+                position: "absolute",
+                top: -6,
+                right: -6,
+                width: 18,
+                height: 18,
+                borderRadius: "50%",
+                border: "none",
+                background: C.inkSoft,
+                color: C.paper,
+                fontSize: 11,
+                lineHeight: 1,
+                cursor: "pointer",
+                padding: 0,
               }}
-            >×</button>
+            >
+              ×
+            </button>
           </div>
         )}
 
-        <input ref={imgInputRef} type="file" accept="image/*" style={{ display: "none" }}
-          onChange={(e) => { handleImageFile(e.target.files?.[0]); e.target.value = ""; }}
+        <input
+          ref={imgInputRef}
+          type="file"
+          accept="image/*"
+          style={{ display: "none" }}
+          onChange={(e) => {
+            handleImageFile(e.target.files?.[0]);
+            e.target.value = "";
+          }}
         />
 
         {/* 텍스트 입력 박스 */}
@@ -549,18 +697,31 @@ export default function Chat({ chat, docs: docsHook }) {
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             onPaste={(e) => {
-              const img = Array.from(e.clipboardData?.items || []).find((it) => it.type.startsWith("image/"));
-              if (img) { e.preventDefault(); handleImageFile(img.getAsFile()); }
+              const img = Array.from(e.clipboardData?.items || []).find((it) =>
+                it.type.startsWith("image/"),
+              );
+              if (img) {
+                e.preventDefault();
+                handleImageFile(img.getAsFile());
+              }
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
-                e.preventDefault(); ask(selectedDocs); return;
+                e.preventDefault();
+                ask(selectedDocs);
+                return;
               }
               if (e.key === "ArrowUp" && e.target.selectionStart === 0 && !e.shiftKey) {
-                e.preventDefault(); navigateHistory(-1);
+                e.preventDefault();
+                navigateHistory(-1);
               }
-              if (e.key === "ArrowDown" && e.target.selectionStart === e.target.value.length && !e.shiftKey) {
-                e.preventDefault(); navigateHistory(1);
+              if (
+                e.key === "ArrowDown" &&
+                e.target.selectionStart === e.target.value.length &&
+                !e.shiftKey
+              ) {
+                e.preventDefault();
+                navigateHistory(1);
               }
             }}
             placeholder="내 자료에 대해 물어보세요. (Enter 질문 · Shift+Enter 줄바꿈)"
@@ -588,7 +749,9 @@ export default function Chat({ chat, docs: docsHook }) {
               gap: 8,
             }}
           >
-            {askError && <span style={{ fontSize: 12.5, color: "#dc2626", flex: 1 }}>{askError}</span>}
+            {askError && (
+              <span style={{ fontSize: 12.5, color: "#dc2626", flex: 1 }}>{askError}</span>
+            )}
 
             <button
               onClick={() => imgInputRef.current?.click()}
@@ -604,7 +767,9 @@ export default function Chat({ chat, docs: docsHook }) {
                 cursor: asking ? "default" : "pointer",
                 lineHeight: 1,
               }}
-            >🖼</button>
+            >
+              🖼
+            </button>
 
             {asking ? (
               <button
@@ -621,7 +786,9 @@ export default function Chat({ chat, docs: docsHook }) {
                   fontFamily: sans,
                   transition: "all .15s",
                 }}
-              >■ 중단</button>
+              >
+                ■ 중단
+              </button>
             ) : (
               <button
                 onClick={() => ask(selectedDocs)}
@@ -638,7 +805,9 @@ export default function Chat({ chat, docs: docsHook }) {
                   fontFamily: sans,
                   transition: "all .15s",
                 }}
-              >질문</button>
+              >
+                질문
+              </button>
             )}
           </div>
         </div>

@@ -53,7 +53,14 @@ export const postIndexUrl = (url, folderId = null) =>
   });
 
 // ── 질문 ──────────────────────────────────────────────────────────────────────
-export const postAsk = (question, history, docIds, image = null, signal = null, fullContext = false) =>
+export const postAsk = (
+  question,
+  history,
+  docIds,
+  image = null,
+  signal = null,
+  fullContext = false,
+) =>
   fetch("/api/ask", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -115,7 +122,10 @@ export async function readSSE(response, handlers, signal = null) {
   let buf = "";
   try {
     while (true) {
-      if (signal?.aborted) { reader.cancel(); break; }
+      if (signal?.aborted) {
+        reader.cancel();
+        break;
+      }
       const { done, value } = await reader.read();
       if (done) break;
       buf += decoder.decode(value, { stream: true });

@@ -27,7 +27,11 @@ export default function useChat(onMemoryExtracted) {
   const [savingName, setSavingName] = useState("");
   const [showSaveInput, setShowSaveInput] = useState(false);
   const [favorites, setFavorites] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(FAVORITES_KEY) || "[]"); } catch { return []; }
+    try {
+      return JSON.parse(localStorage.getItem(FAVORITES_KEY) || "[]");
+    } catch {
+      return [];
+    }
   });
 
   // 대화 임시 저장 (세션 새로고침 복원)
@@ -191,33 +195,51 @@ export default function useChat(onMemoryExtracted) {
       return next;
     });
 
-    let answer = "", sources = [];
+    let answer = "",
+      sources = [];
     try {
-      const r = await postAsk(q, history, selectedDocs, image?.base64 ?? null, controller.signal, fc);
+      const r = await postAsk(
+        q,
+        history,
+        selectedDocs,
+        image?.base64 ?? null,
+        controller.signal,
+        fc,
+      );
       if (!r.ok) {
         const d = await r.json();
         throw new Error(d.error || "질문 처리 실패");
       }
-      await readSSE(r, {
-        status: (e) => setResult((p) => ({ ...(p || { sources: [], answer: "" }), status: e.message })),
-        token: (e) => {
-          answer += e.text;
-          setResult((p) => ({ ...(p || { sources: [] }), answer, status: null }));
-          scrollToBottom();
+      await readSSE(
+        r,
+        {
+          status: (e) =>
+            setResult((p) => ({ ...(p || { sources: [], answer: "" }), status: e.message })),
+          token: (e) => {
+            answer += e.text;
+            setResult((p) => ({ ...(p || { sources: [] }), answer, status: null }));
+            scrollToBottom();
+          },
+          sources: (e) => {
+            sources = e.sources;
+            setResult((p) => ({ ...(p || { answer: "" }), sources }));
+          },
         },
-        sources: (e) => {
-          sources = e.sources;
-          setResult((p) => ({ ...(p || { answer: "" }), sources }));
-        },
-      }, controller.signal);
+        controller.signal,
+      );
 
-      setConversation((prev) => [...prev, { q, a: answer, sources, image: image?.preview ?? null }]);
+      setConversation((prev) => [
+        ...prev,
+        { q, a: answer, sources, image: image?.preview ?? null },
+      ]);
       setResult(null);
       setQuestion("");
       setAttachedImage(null);
       // 기억 자동 추출 (fire-and-forget)
       extractMemory(q, answer)
-        .then(({ extracted }) => { if (extracted?.length > 0) onMemoryExtracted?.(); })
+        .then(({ extracted }) => {
+          if (extracted?.length > 0) onMemoryExtracted?.();
+        })
         .catch(() => {});
       setTimeout(scrollToBottom, 50);
     } catch (e) {
@@ -226,7 +248,10 @@ export default function useChat(onMemoryExtracted) {
         setAskError(e.message || "질문 처리 중 오류가 발생했어요.");
       } else if (answer) {
         // 취소 시 지금까지 받은 답변 저장
-        setConversation((prev) => [...prev, { q, a: answer, sources, image: image?.preview ?? null }]);
+        setConversation((prev) => [
+          ...prev,
+          { q, a: answer, sources, image: image?.preview ?? null },
+        ]);
         setQuestion("");
         setAttachedImage(null);
       }

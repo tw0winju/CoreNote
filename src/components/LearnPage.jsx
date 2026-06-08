@@ -40,9 +40,7 @@ function DocItem({ doc, selected, onSelect, indent = false }) {
 }
 
 function DocTree({ docs, folders, selectedId, onSelect }) {
-  const [openFolders, setOpenFolders] = useState(
-    () => new Set(folders.map((f) => f.id)),
-  );
+  const [openFolders, setOpenFolders] = useState(() => new Set(folders.map((f) => f.id)));
 
   const toggle = (id) =>
     setOpenFolders((prev) => {
@@ -113,12 +111,7 @@ function DocTree({ docs, folders, selectedId, onSelect }) {
         );
       })}
       {rootDocs.map((doc) => (
-        <DocItem
-          key={doc.id}
-          doc={doc}
-          selected={selectedId === doc.id}
-          onSelect={onSelect}
-        />
+        <DocItem key={doc.id} doc={doc} selected={selectedId === doc.id} onSelect={onSelect} />
       ))}
     </div>
   );
@@ -196,10 +189,16 @@ function FavoritesPanel({ favorites, onRemove }) {
               </div>
               <div style={{ display: "flex", gap: 4, flexShrink: 0, alignItems: "center" }}>
                 <span style={{ fontSize: 10, color: C.inkSoft }}>
-                  {new Date(f.savedAt).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" })}
+                  {new Date(f.savedAt).toLocaleDateString("ko-KR", {
+                    month: "numeric",
+                    day: "numeric",
+                  })}
                 </span>
                 <button
-                  onClick={(e) => { e.stopPropagation(); onRemove(f.id); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemove(f.id);
+                  }}
                   style={{
                     border: "none",
                     background: "transparent",
@@ -304,7 +303,12 @@ function QuizPanel({ docs, folders }) {
           docs={docs}
           folders={folders}
           selectedId={selectedDocId}
-          onSelect={(id) => { setSelectedDocId(id); setQuestions([]); setDone(false); setError(""); }}
+          onSelect={(id) => {
+            setSelectedDocId(id);
+            setQuestions([]);
+            setDone(false);
+            setError("");
+          }}
         />
       </div>
 
@@ -327,7 +331,16 @@ function QuizPanel({ docs, folders }) {
       </button>
 
       {error && (
-        <div style={{ fontSize: 13, color: "#e74c3c", padding: "8px 12px", background: "#fdf2f2", borderRadius: 8, flexShrink: 0 }}>
+        <div
+          style={{
+            fontSize: 13,
+            color: "#e74c3c",
+            padding: "8px 12px",
+            background: "#fdf2f2",
+            borderRadius: 8,
+            flexShrink: 0,
+          }}
+        >
           {error}
         </div>
       )}
@@ -335,8 +348,12 @@ function QuizPanel({ docs, folders }) {
       {questions.length > 0 && !done && q && (
         <div style={{ display: "flex", flexDirection: "column", gap: 10, overflowY: "auto" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontSize: 12, color: C.inkSoft }}>{current + 1} / {questions.length}</span>
-            <span style={{ fontSize: 12, color: C.inkSoft }}>맞춤: {score.correct} / {score.total}</span>
+            <span style={{ fontSize: 12, color: C.inkSoft }}>
+              {current + 1} / {questions.length}
+            </span>
+            <span style={{ fontSize: 12, color: C.inkSoft }}>
+              맞춤: {score.correct} / {score.total}
+            </span>
           </div>
           <div
             style={{
@@ -463,7 +480,11 @@ function QuizPanel({ docs, folders }) {
       {done && (
         <div style={{ textAlign: "center", padding: "20px 0" }}>
           <div style={{ fontSize: 28, marginBottom: 8 }}>
-            {score.correct === questions.length ? "🎉" : score.correct >= questions.length / 2 ? "👍" : "📚"}
+            {score.correct === questions.length
+              ? "🎉"
+              : score.correct >= questions.length / 2
+                ? "👍"
+                : "📚"}
           </div>
           <div style={{ fontSize: 20, fontWeight: 700, fontFamily: serif, marginBottom: 4 }}>
             {score.correct} / {questions.length}
@@ -472,8 +493,8 @@ function QuizPanel({ docs, folders }) {
             {score.correct === questions.length
               ? "완벽해요!"
               : score.correct >= questions.length / 2
-              ? "잘 하고 있어요!"
-              : "조금 더 복습해봐요!"}
+                ? "잘 하고 있어요!"
+                : "조금 더 복습해봐요!"}
           </div>
           <button
             onClick={generate}
@@ -580,7 +601,15 @@ function SummaryPanel({ docs, folders }) {
           </div>
         )}
         {selectedDocId && loading === selectedDocId && (
-          <div style={{ color: C.inkSoft, display: "flex", alignItems: "center", gap: 8, paddingTop: 8 }}>
+          <div
+            style={{
+              color: C.inkSoft,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              paddingTop: 8,
+            }}
+          >
             <span
               className="spin"
               style={{
@@ -607,7 +636,16 @@ function SummaryPanel({ docs, folders }) {
               }}
             >
               {cached[selectedDocId] && (
-                <span style={{ fontSize: 11, color: C.inkSoft, background: C.paper2, border: `1px solid ${C.line}`, borderRadius: 4, padding: "1px 6px" }}>
+                <span
+                  style={{
+                    fontSize: 11,
+                    color: C.inkSoft,
+                    background: C.paper2,
+                    border: `1px solid ${C.line}`,
+                    borderRadius: 4,
+                    padding: "1px 6px",
+                  }}
+                >
                   캐시됨
                 </span>
               )}
@@ -641,8 +679,8 @@ function SummaryPanel({ docs, folders }) {
 // ── LearnPage ─────────────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: "summary",   label: "📄 요약" },
-  { id: "quiz",      label: "🎯 퀴즈" },
+  { id: "summary", label: "📄 요약" },
+  { id: "quiz", label: "🎯 퀴즈" },
   { id: "favorites", label: "★ 즐겨찾기" },
 ];
 

@@ -32,7 +32,9 @@ export default function MemoryPanel({ memories, onAdd, onDelete }) {
         }}
       >
         <span style={{ fontSize: 13 }}>🧠</span>
-        <span style={{ flex: 1, textAlign: "left", fontWeight: 600, color: "rgba(255,255,255,0.45)" }}>
+        <span
+          style={{ flex: 1, textAlign: "left", fontWeight: 600, color: "rgba(255,255,255,0.45)" }}
+        >
           기억 {memories.length > 0 ? `(${memories.length})` : ""}
         </span>
         <span style={{ fontSize: 9 }}>{open ? "▲" : "▼"}</span>
@@ -40,9 +42,18 @@ export default function MemoryPanel({ memories, onAdd, onDelete }) {
 
       {open && (
         <div style={{ padding: "0 10px 12px" }}>
-          <div style={{ maxHeight: 200, overflowY: "auto", display: "grid", gap: 4, marginBottom: 7 }}>
+          <div
+            style={{ maxHeight: 200, overflowY: "auto", display: "grid", gap: 4, marginBottom: 7 }}
+          >
             {memories.length === 0 && (
-              <div style={{ fontSize: 11.5, color: "rgba(255,255,255,0.22)", padding: "4px 2px", lineHeight: 1.6 }}>
+              <div
+                style={{
+                  fontSize: 11.5,
+                  color: "rgba(255,255,255,0.22)",
+                  padding: "4px 2px",
+                  lineHeight: 1.6,
+                }}
+              >
                 아직 기억이 없어요.
               </div>
             )}
@@ -60,18 +71,32 @@ export default function MemoryPanel({ memories, onAdd, onDelete }) {
                   lineHeight: 1.55,
                 }}
               >
-                <span style={{ fontSize: 10, color: "rgba(255,255,255,0.28)", flexShrink: 0, marginTop: 1 }}>
+                <span
+                  style={{
+                    fontSize: 10,
+                    color: "rgba(255,255,255,0.28)",
+                    flexShrink: 0,
+                    marginTop: 1,
+                  }}
+                >
                   {m.source === "auto" ? "✦" : "✎"}
                 </span>
                 <span style={{ flex: 1, color: "rgba(255,255,255,0.6)" }}>{m.content}</span>
                 <button
                   onClick={() => onDelete(m.id)}
                   style={{
-                    border: "none", background: "transparent",
-                    color: "rgba(255,255,255,0.22)", fontSize: 13,
-                    lineHeight: 1, cursor: "pointer", padding: "0 1px", flexShrink: 0,
+                    border: "none",
+                    background: "transparent",
+                    color: "rgba(255,255,255,0.22)",
+                    fontSize: 13,
+                    lineHeight: 1,
+                    cursor: "pointer",
+                    padding: "0 1px",
+                    flexShrink: 0,
                   }}
-                >×</button>
+                >
+                  ×
+                </button>
               </div>
             ))}
           </div>
@@ -84,7 +109,10 @@ export default function MemoryPanel({ memories, onAdd, onDelete }) {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleAdd();
-                  if (e.key === "Escape") { setShowInput(false); setInput(""); }
+                  if (e.key === "Escape") {
+                    setShowInput(false);
+                    setInput("");
+                  }
                 }}
                 placeholder="기억할 내용"
                 style={{
@@ -102,11 +130,18 @@ export default function MemoryPanel({ memories, onAdd, onDelete }) {
               <button
                 onClick={handleAdd}
                 style={{
-                  border: "none", background: C.accent, color: "#fff",
-                  padding: "5px 9px", borderRadius: 6,
-                  fontSize: 12, cursor: "pointer", fontFamily: sans,
+                  border: "none",
+                  background: C.accent,
+                  color: "#fff",
+                  padding: "5px 9px",
+                  borderRadius: 6,
+                  fontSize: 12,
+                  cursor: "pointer",
+                  fontFamily: sans,
                 }}
-              >추가</button>
+              >
+                추가
+              </button>
             </div>
           ) : (
             <button
@@ -122,7 +157,9 @@ export default function MemoryPanel({ memories, onAdd, onDelete }) {
                 cursor: "pointer",
                 fontFamily: sans,
               }}
-            >+ 직접 추가</button>
+            >
+              + 직접 추가
+            </button>
           )}
         </div>
       )}

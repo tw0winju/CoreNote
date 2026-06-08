@@ -1,4 +1,4 @@
-import { C, sans, serif, shadow } from "../theme";
+import { C, sans, shadow } from "../theme";
 import { PROMPT_PRESETS } from "../prompts";
 
 function Toggle({ checked, onChange }) {
@@ -19,7 +19,15 @@ function Toggle({ checked, onChange }) {
 function Field({ label, children, hint }) {
   return (
     <div style={{ marginBottom: 16 }}>
-      <label style={{ fontSize: 12.5, color: C.inkSoft, display: "block", marginBottom: 5, fontWeight: 500 }}>
+      <label
+        style={{
+          fontSize: 12.5,
+          color: C.inkSoft,
+          display: "block",
+          marginBottom: 5,
+          fontWeight: 500,
+        }}
+      >
         {label}
       </label>
       {children}
@@ -58,13 +66,18 @@ export default function SettingsModal({ form, setForm, onSave, onClose }) {
 
   return (
     <div
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
       style={{
-        position: "fixed", inset: 0,
+        position: "fixed",
+        inset: 0,
         background: "rgba(0,0,0,0.45)",
         backdropFilter: "blur(4px)",
         zIndex: 100,
-        display: "flex", alignItems: "center", justifyContent: "center",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
         padding: 20,
       }}
     >
@@ -81,18 +94,31 @@ export default function SettingsModal({ form, setForm, onSave, onClose }) {
           border: `1px solid ${C.line}`,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 22 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: 22,
+          }}
+        >
           <h3 style={{ fontFamily: sans, fontSize: 17, margin: 0, fontWeight: 700, color: C.ink }}>
             설정
           </h3>
           <button
             onClick={onClose}
             style={{
-              border: "none", background: "transparent",
-              color: C.inkSoft, fontSize: 20, lineHeight: 1,
-              cursor: "pointer", padding: "0 4px",
+              border: "none",
+              background: "transparent",
+              color: C.inkSoft,
+              fontSize: 20,
+              lineHeight: 1,
+              cursor: "pointer",
+              padding: "0 4px",
             }}
-          >×</button>
+          >
+            ×
+          </button>
         </div>
 
         {/* 모델 */}
@@ -100,10 +126,16 @@ export default function SettingsModal({ form, setForm, onSave, onClose }) {
           <SectionLabel>모델</SectionLabel>
           <div style={{ display: "grid", gap: 12 }}>
             <Field label="답변 모델">
-              <TextInput value={form.chatModel || ""} onChange={(e) => set("chatModel", e.target.value)} />
+              <TextInput
+                value={form.chatModel || ""}
+                onChange={(e) => set("chatModel", e.target.value)}
+              />
             </Field>
             <Field label="임베딩 모델">
-              <TextInput value={form.embedModel || ""} onChange={(e) => set("embedModel", e.target.value)} />
+              <TextInput
+                value={form.embedModel || ""}
+                onChange={(e) => set("embedModel", e.target.value)}
+              />
             </Field>
           </div>
         </div>
@@ -115,10 +147,18 @@ export default function SettingsModal({ form, setForm, onSave, onClose }) {
           <SectionLabel>검색</SectionLabel>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <Field label="청크 크기 (자)">
-              <TextInput type="number" value={form.maxChunkChars || ""} onChange={(e) => set("maxChunkChars", Number(e.target.value))} />
+              <TextInput
+                type="number"
+                value={form.maxChunkChars || ""}
+                onChange={(e) => set("maxChunkChars", Number(e.target.value))}
+              />
             </Field>
             <Field label="검색 결과 수">
-              <TextInput type="number" value={form.topK || ""} onChange={(e) => set("topK", Number(e.target.value))} />
+              <TextInput
+                type="number"
+                value={form.topK || ""}
+                onChange={(e) => set("topK", Number(e.target.value))}
+              />
             </Field>
           </div>
         </div>
@@ -130,9 +170,21 @@ export default function SettingsModal({ form, setForm, onSave, onClose }) {
           <SectionLabel>고급 기능</SectionLabel>
           <div style={{ display: "grid", gap: 8 }}>
             {[
-              { key: "hydeEnabled",    label: "HyDE 검색 향상",   desc: "가상 답변으로 검색 정확도를 높입니다. 추가 LLM 호출이 발생합니다." },
-              { key: "rerankEnabled",  label: "LLM 재순위화",     desc: "검색 결과를 LLM으로 재정렬합니다. 추가 LLM 호출이 발생합니다." },
-              { key: "memoryEnabled",  label: "대화 기억",        desc: "대화 후 중요한 내용을 자동으로 기억해 다음 대화에 활용합니다." },
+              {
+                key: "hydeEnabled",
+                label: "HyDE 검색 향상",
+                desc: "가상 답변으로 검색 정확도를 높입니다. 추가 LLM 호출이 발생합니다.",
+              },
+              {
+                key: "rerankEnabled",
+                label: "LLM 재순위화",
+                desc: "검색 결과를 LLM으로 재정렬합니다. 추가 LLM 호출이 발생합니다.",
+              },
+              {
+                key: "memoryEnabled",
+                label: "대화 기억",
+                desc: "대화 후 중요한 내용을 자동으로 기억해 다음 대화에 활용합니다.",
+              },
             ].map(({ key, label, desc }) => (
               <div
                 key={key}
@@ -150,7 +202,9 @@ export default function SettingsModal({ form, setForm, onSave, onClose }) {
                 onClick={() => set(key, !form[key])}
               >
                 <div>
-                  <div style={{ fontSize: 13.5, fontWeight: 500, color: C.ink, marginBottom: 2 }}>{label}</div>
+                  <div style={{ fontSize: 13.5, fontWeight: 500, color: C.ink, marginBottom: 2 }}>
+                    {label}
+                  </div>
                   <div style={{ fontSize: 12, color: C.inkSoft, lineHeight: 1.5 }}>{desc}</div>
                 </div>
                 <Toggle checked={!!form[key]} onChange={(v) => set(key, v)} />
@@ -163,7 +217,14 @@ export default function SettingsModal({ form, setForm, onSave, onClose }) {
 
         {/* 시스템 프롬프트 */}
         <div style={{ marginBottom: 6 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginBottom: 10,
+            }}
+          >
             <SectionLabel noMargin>시스템 프롬프트</SectionLabel>
             <div style={{ display: "flex", gap: 4 }}>
               {PROMPT_PRESETS.map((p) => (
@@ -181,7 +242,9 @@ export default function SettingsModal({ form, setForm, onSave, onClose }) {
                     fontFamily: sans,
                     fontWeight: form.systemPrompt === p.value ? 600 : 400,
                   }}
-                >{p.label}</button>
+                >
+                  {p.label}
+                </button>
               ))}
             </div>
           </div>
@@ -227,7 +290,9 @@ export default function SettingsModal({ form, setForm, onSave, onClose }) {
               fontSize: 13.5,
               transition: "all .15s",
             }}
-          >취소</button>
+          >
+            취소
+          </button>
           <button
             onClick={onSave}
             style={{
@@ -242,7 +307,9 @@ export default function SettingsModal({ form, setForm, onSave, onClose }) {
               fontWeight: 600,
               transition: "all .15s",
             }}
-          >저장</button>
+          >
+            저장
+          </button>
         </div>
       </div>
     </div>

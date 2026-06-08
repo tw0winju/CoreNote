@@ -4,26 +4,37 @@ import { C, sans, shadow } from "../theme";
 // ── 폴더 행 ───────────────────────────────────────────────────────────────────
 function FolderRow({ folder, docs, docsHook, onDrop }) {
   const {
-    selectedDocs, toggleFolder, removeFolder,
-    renameFolderId, renameFolderName, setRenameFolderName,
-    startRenameFolder, cancelRenameFolder, commitRenameFolder,
-    renameId, renameName, setRenameName,
-    startRename, cancelRename, commitRename,
-    removeDoc, toggleDoc, moveDoc, folders,
+    selectedDocs,
+    toggleFolder,
+    removeFolder,
+    renameFolderId,
+    renameFolderName,
+    setRenameFolderName,
+    startRenameFolder,
+    cancelRenameFolder,
+    commitRenameFolder,
   } = docsHook;
 
   const [open, setOpen] = useState(true);
   const [dropOver, setDropOver] = useState(false);
-  const folderDocs   = docs.filter((d) => d.folderId === folder.id);
+  const folderDocs = docs.filter((d) => d.folderId === folder.id);
   const selectedCount = folderDocs.filter((d) => selectedDocs.has(d.id)).length;
-  const allSelected  = folderDocs.length > 0 && selectedCount === folderDocs.length;
+  const allSelected = folderDocs.length > 0 && selectedCount === folderDocs.length;
   const someSelected = selectedCount > 0 && !allSelected;
 
   return (
     <div
-      onDragOver={(e) => { e.preventDefault(); setDropOver(true); }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDropOver(true);
+      }}
       onDragLeave={() => setDropOver(false)}
-      onDrop={(e) => { e.preventDefault(); setDropOver(false); const d = e.dataTransfer.getData("docId"); if (d) onDrop(d, folder.id); }}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDropOver(false);
+        const d = e.dataTransfer.getData("docId");
+        if (d) onDrop(d, folder.id);
+      }}
     >
       {/* 폴더 헤더 */}
       <div
@@ -44,7 +55,11 @@ function FolderRow({ folder, docs, docsHook, onDrop }) {
           onClick={() => toggleFolder(folder.id)}
           title={allSelected ? "해제" : "전체 선택"}
           style={{
-            width: 15, height: 15, flexShrink: 0, padding: 0, cursor: "pointer",
+            width: 15,
+            height: 15,
+            flexShrink: 0,
+            padding: 0,
+            cursor: "pointer",
             border: `2px solid ${allSelected || someSelected ? C.accent : C.line}`,
             borderRadius: "50%",
             background: allSelected ? C.accent : someSelected ? C.accentSoft : "transparent",
@@ -52,7 +67,20 @@ function FolderRow({ folder, docs, docsHook, onDrop }) {
           }}
         >
           {someSelected && (
-            <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: C.accent, lineHeight: 1 }}>—</span>
+            <span
+              style={{
+                position: "absolute",
+                inset: 0,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 9,
+                color: C.accent,
+                lineHeight: 1,
+              }}
+            >
+              —
+            </span>
           )}
         </button>
 
@@ -60,33 +88,69 @@ function FolderRow({ folder, docs, docsHook, onDrop }) {
         <button
           onClick={() => setOpen((v) => !v)}
           style={{
-            border: "none", background: "transparent", cursor: "pointer", padding: 0,
-            fontSize: 13, lineHeight: 1, display: "flex", alignItems: "center", gap: 4,
-            flex: 1, minWidth: 0, fontFamily: sans,
+            border: "none",
+            background: "transparent",
+            cursor: "pointer",
+            padding: 0,
+            fontSize: 13,
+            lineHeight: 1,
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
+            flex: 1,
+            minWidth: 0,
+            fontFamily: sans,
           }}
         >
           <span style={{ fontSize: 13 }}>{open ? "📂" : "📁"}</span>
           {renameFolderId === folder.id ? (
             <input
-              autoFocus value={renameFolderName}
+              autoFocus
+              value={renameFolderName}
               onChange={(e) => setRenameFolderName(e.target.value)}
               onBlur={commitRenameFolder}
-              onKeyDown={(e) => { if (e.key === "Enter") commitRenameFolder(); if (e.key === "Escape") cancelRenameFolder(); }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitRenameFolder();
+                if (e.key === "Escape") cancelRenameFolder();
+              }}
               onClick={(e) => e.stopPropagation()}
-              style={{ flex: 1, padding: "1px 5px", border: `1px solid ${C.accent}`, borderRadius: 4, fontFamily: sans, fontSize: 13, background: C.card }}
+              style={{
+                flex: 1,
+                padding: "1px 5px",
+                border: `1px solid ${C.accent}`,
+                borderRadius: 4,
+                fontFamily: sans,
+                fontSize: 13,
+                background: C.card,
+              }}
             />
           ) : (
-            <span style={{ fontSize: 12.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: C.ink }}>
+            <span
+              style={{
+                fontSize: 12.5,
+                fontWeight: 600,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                color: C.ink,
+              }}
+            >
               {folder.name}
             </span>
           )}
-          <span style={{ fontSize: 10.5, color: C.inkSoft, flexShrink: 0 }}>{folderDocs.length}</span>
+          <span style={{ fontSize: 10.5, color: C.inkSoft, flexShrink: 0 }}>
+            {folderDocs.length}
+          </span>
         </button>
 
         {renameFolderId !== folder.id && (
-          <IconAction onClick={() => startRenameFolder(folder)} title="이름 변경">✎</IconAction>
+          <IconAction onClick={() => startRenameFolder(folder)} title="이름 변경">
+            ✎
+          </IconAction>
         )}
-        <IconAction onClick={() => removeFolder(folder.id)} title="폴더 삭제">×</IconAction>
+        <IconAction onClick={() => removeFolder(folder.id)} title="폴더 삭제">
+          ×
+        </IconAction>
       </div>
 
       {open && (
@@ -106,8 +170,17 @@ function FolderRow({ folder, docs, docsHook, onDrop }) {
 // ── 문서 행 ───────────────────────────────────────────────────────────────────
 function DocRow({ doc, docsHook }) {
   const {
-    selectedDocs, toggleDoc, removeDoc, moveDoc, folders,
-    renameId, renameName, setRenameName, startRename, cancelRename, commitRename,
+    selectedDocs,
+    toggleDoc,
+    removeDoc,
+    moveDoc,
+    folders,
+    renameId,
+    renameName,
+    setRenameName,
+    startRename,
+    cancelRename,
+    commitRename,
   } = docsHook;
 
   const [showMoveMenu, setShowMoveMenu] = useState(false);
@@ -116,7 +189,10 @@ function DocRow({ doc, docsHook }) {
   return (
     <div
       draggable
-      onDragStart={(e) => { e.dataTransfer.setData("docId", doc.id); e.dataTransfer.effectAllowed = "move"; }}
+      onDragStart={(e) => {
+        e.dataTransfer.setData("docId", doc.id);
+        e.dataTransfer.effectAllowed = "move";
+      }}
       onClick={() => toggleDoc(doc.id)}
       style={{
         background: selected ? C.accentSoft : C.card,
@@ -134,7 +210,9 @@ function DocRow({ doc, docsHook }) {
       {/* 선택 원형 */}
       <div
         style={{
-          width: 14, height: 14, flexShrink: 0,
+          width: 14,
+          height: 14,
+          flexShrink: 0,
           border: `2px solid ${selected ? C.accent : C.line}`,
           borderRadius: "50%",
           background: selected ? C.accent : "transparent",
@@ -145,51 +223,117 @@ function DocRow({ doc, docsHook }) {
       <div style={{ minWidth: 0, flex: 1 }}>
         {renameId === doc.id ? (
           <input
-            autoFocus value={renameName}
+            autoFocus
+            value={renameName}
             onChange={(e) => setRenameName(e.target.value)}
             onBlur={commitRename}
-            onKeyDown={(e) => { if (e.key === "Enter") commitRename(); if (e.key === "Escape") cancelRename(); }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitRename();
+              if (e.key === "Escape") cancelRename();
+            }}
             onClick={(e) => e.stopPropagation()}
-            style={{ width: "100%", padding: "2px 5px", border: `1px solid ${C.accent}`, borderRadius: 4, fontFamily: sans, fontSize: 12.5, background: C.card }}
+            style={{
+              width: "100%",
+              padding: "2px 5px",
+              border: `1px solid ${C.accent}`,
+              borderRadius: 4,
+              fontFamily: sans,
+              fontSize: 12.5,
+              background: C.card,
+            }}
           />
         ) : (
           <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
-            <span style={{ fontSize: 12.5, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: selected ? C.accent : C.ink }}>
+            <span
+              style={{
+                fontSize: 12.5,
+                fontWeight: 500,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                color: selected ? C.accent : C.ink,
+              }}
+            >
               {doc.name}
             </span>
-            <IconAction onClick={(e) => { e.stopPropagation(); startRename(doc); }} title="이름 변경" small>✎</IconAction>
+            <IconAction
+              onClick={(e) => {
+                e.stopPropagation();
+                startRename(doc);
+              }}
+              title="이름 변경"
+              small
+            >
+              ✎
+            </IconAction>
           </div>
         )}
-        <div style={{ fontSize: 10.5, color: C.inkSoft, marginTop: 1 }}>{doc.chunkCount}개 조각</div>
+        <div style={{ fontSize: 10.5, color: C.inkSoft, marginTop: 1 }}>
+          {doc.chunkCount}개 조각
+        </div>
       </div>
 
       {/* 폴더 이동 */}
       <div style={{ position: "relative", flexShrink: 0 }}>
         <IconAction
-          onClick={(e) => { e.stopPropagation(); setShowMoveMenu((v) => !v); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowMoveMenu((v) => !v);
+          }}
           title="폴더 이동"
-        >📂</IconAction>
+        >
+          📂
+        </IconAction>
         {showMoveMenu && (
           <div
             style={{
-              position: "absolute", right: 0, top: "100%", zIndex: 50,
+              position: "absolute",
+              right: 0,
+              top: "100%",
+              zIndex: 50,
               background: C.card,
               border: `1px solid ${C.line}`,
               borderRadius: "var(--radius-sm)",
               boxShadow: shadow.md,
-              minWidth: 130, padding: 4,
+              minWidth: 130,
+              padding: 4,
             }}
           >
-            <MoveItem label="📄 루트" active={doc.folderId === null} onClick={(e) => { e.stopPropagation(); moveDoc(doc.id, null); setShowMoveMenu(false); }} />
+            <MoveItem
+              label="📄 루트"
+              active={doc.folderId === null}
+              onClick={(e) => {
+                e.stopPropagation();
+                moveDoc(doc.id, null);
+                setShowMoveMenu(false);
+              }}
+            />
             {folders.map((f) => (
-              <MoveItem key={f.id} label={`📁 ${f.name}`} active={doc.folderId === f.id} onClick={(e) => { e.stopPropagation(); moveDoc(doc.id, f.id); setShowMoveMenu(false); }} />
+              <MoveItem
+                key={f.id}
+                label={`📁 ${f.name}`}
+                active={doc.folderId === f.id}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  moveDoc(doc.id, f.id);
+                  setShowMoveMenu(false);
+                }}
+              />
             ))}
           </div>
         )}
       </div>
 
       {/* 삭제 */}
-      <IconAction onClick={(e) => { e.stopPropagation(); removeDoc(doc.id); }} title="삭제">×</IconAction>
+      <IconAction
+        onClick={(e) => {
+          e.stopPropagation();
+          removeDoc(doc.id);
+        }}
+        title="삭제"
+      >
+        ×
+      </IconAction>
     </div>
   );
 }
@@ -199,13 +343,21 @@ function MoveItem({ label, active, onClick }) {
     <button
       onClick={onClick}
       style={{
-        display: "block", width: "100%", textAlign: "left",
-        padding: "6px 10px", fontSize: 12.5,
-        border: "none", background: active ? C.accentSoft : "transparent",
+        display: "block",
+        width: "100%",
+        textAlign: "left",
+        padding: "6px 10px",
+        fontSize: 12.5,
+        border: "none",
+        background: active ? C.accentSoft : "transparent",
         color: active ? C.accent : C.ink,
-        cursor: "pointer", borderRadius: 5, fontFamily: sans,
+        cursor: "pointer",
+        borderRadius: 5,
+        fontFamily: sans,
       }}
-    >{label}</button>
+    >
+      {label}
+    </button>
   );
 }
 
@@ -215,33 +367,43 @@ function IconAction({ children, onClick, title, small }) {
       onClick={onClick}
       title={title}
       style={{
-        border: "none", background: "transparent",
+        border: "none",
+        background: "transparent",
         color: C.inkSoft,
         fontSize: small ? 11 : 14,
-        lineHeight: 1, cursor: "pointer",
+        lineHeight: 1,
+        cursor: "pointer",
         padding: small ? "0 1px" : "0 2px",
         opacity: 0.55,
         flexShrink: 0,
         transition: "opacity .12s",
       }}
-    >{children}</button>
+    >
+      {children}
+    </button>
   );
 }
 
 // ── Library ───────────────────────────────────────────────────────────────────
 export default function Library({ docs: docsHook, indexing: indexingHook }) {
-  const {
-    docs, folders, selectedDocs,
-    renameId, renameName, setRenameName,
-    toggleDoc, removeDoc, startRename, cancelRename, commitRename,
-    moveDoc, createFolder,
-  } = docsHook;
+  const { docs, folders, moveDoc, createFolder } = docsHook;
 
   const {
-    indexing, indexError, spinnerMsg, uploadMode, setUploadMode,
-    urlInput, setUrlInput, uploadFiles, uploadUrl,
-    pageFrom, setPageFrom, pageTo, setPageTo,
-    targetFolderId, setTargetFolderId,
+    indexing,
+    indexError,
+    spinnerMsg,
+    uploadMode,
+    setUploadMode,
+    urlInput,
+    setUrlInput,
+    uploadFiles,
+    uploadUrl,
+    pageFrom,
+    setPageFrom,
+    pageTo,
+    setPageTo,
+    targetFolderId,
+    setTargetFolderId,
   } = indexingHook;
 
   const inputRef = useRef(null);
@@ -252,10 +414,16 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
   const [docSearch, setDocSearch] = useState("");
 
   const searchLower = docSearch.toLowerCase();
-  const filteredDocs = docSearch ? docs.filter((d) => d.name.toLowerCase().includes(searchLower)) : docs;
+  const filteredDocs = docSearch
+    ? docs.filter((d) => d.name.toLowerCase().includes(searchLower))
+    : docs;
   const rootDocs = filteredDocs.filter((d) => !d.folderId);
   const visibleFolders = docSearch
-    ? folders.filter((f) => f.name.toLowerCase().includes(searchLower) || filteredDocs.some((d) => d.folderId === f.id))
+    ? folders.filter(
+        (f) =>
+          f.name.toLowerCase().includes(searchLower) ||
+          filteredDocs.some((d) => d.folderId === f.id),
+      )
     : folders;
 
   const handleDocDrop = (docId, folderId) => moveDoc(docId, folderId);
@@ -271,7 +439,14 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
   return (
     <section style={{ width: "100%" }}>
       {/* 헤더 */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: 14,
+        }}
+      >
         <h2 style={{ fontFamily: sans, fontSize: 14, fontWeight: 700, margin: 0, color: C.ink }}>
           내 자료
           <span style={{ fontWeight: 400, color: C.inkSoft, fontSize: 12.5, marginLeft: 5 }}>
@@ -291,7 +466,10 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
           gap: 2,
         }}
       >
-        {[["file", "파일"], ["url", "URL"]].map(([mode, label]) => (
+        {[
+          ["file", "파일"],
+          ["url", "URL"],
+        ].map(([mode, label]) => (
           <button
             key={mode}
             onClick={() => setUploadMode(mode)}
@@ -309,7 +487,9 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
               boxShadow: uploadMode === mode ? shadow.xs : "none",
               transition: "all .15s",
             }}
-          >{label}</button>
+          >
+            {label}
+          </button>
         ))}
       </div>
 
@@ -318,10 +498,20 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
         <>
           <div
             onClick={() => !indexing && inputRef.current?.click()}
-            onDragOver={(e) => { e.preventDefault(); if (!indexing) setDragging(true); }}
-            onDragEnter={(e) => { e.preventDefault(); if (!indexing) setDragging(true); }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (!indexing) setDragging(true);
+            }}
+            onDragEnter={(e) => {
+              e.preventDefault();
+              if (!indexing) setDragging(true);
+            }}
             onDragLeave={() => setDragging(false)}
-            onDrop={(e) => { e.preventDefault(); setDragging(false); if (!indexing) uploadFiles(e.dataTransfer.files); }}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragging(false);
+              if (!indexing) uploadFiles(e.dataTransfer.files);
+            }}
             className="zone"
             style={{
               border: `1.5px dashed ${dragging ? C.accent : C.line}`,
@@ -335,34 +525,87 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
             }}
           >
             {indexing ? (
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, color: C.inkSoft, fontSize: 13.5 }}>
-                <span className="spin" style={{ width: 16, height: 16, border: `2px solid ${C.accentSoft}`, borderTopColor: C.accent, borderRadius: "50%", display: "inline-block" }} />
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  color: C.inkSoft,
+                  fontSize: 13.5,
+                }}
+              >
+                <span
+                  className="spin"
+                  style={{
+                    width: 16,
+                    height: 16,
+                    border: `2px solid ${C.accentSoft}`,
+                    borderTopColor: C.accent,
+                    borderRadius: "50%",
+                    display: "inline-block",
+                  }}
+                />
                 {spinnerMsg}
               </div>
             ) : (
               <>
                 <div style={{ fontSize: 24, marginBottom: 6, opacity: 0.5 }}>📎</div>
                 <div style={{ color: C.accent, fontWeight: 600, fontSize: 13.5 }}>자료 추가</div>
-                <div style={{ fontSize: 12, color: C.inkSoft, marginTop: 3 }}>PDF · TXT · MD · DOCX</div>
+                <div style={{ fontSize: 12, color: C.inkSoft, marginTop: 3 }}>
+                  PDF · TXT · MD · DOCX
+                </div>
               </>
             )}
-            <input ref={inputRef} type="file" multiple accept=".pdf,.txt,.md,.docx" style={{ display: "none" }}
+            <input
+              ref={inputRef}
+              type="file"
+              multiple
+              accept=".pdf,.txt,.md,.docx"
+              style={{ display: "none" }}
               onChange={(e) => uploadFiles(e.target.files)}
             />
           </div>
 
           <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-            <StyledSelect value={targetFolderId ?? ""} onChange={(e) => setTargetFolderId(e.target.value || null)} disabled={indexing}>
+            <StyledSelect
+              value={targetFolderId ?? ""}
+              onChange={(e) => setTargetFolderId(e.target.value || null)}
+              disabled={indexing}
+            >
               <option value="">📄 루트</option>
-              {folders.map((f) => <option key={f.id} value={f.id}>📁 {f.name}</option>)}
+              {folders.map((f) => (
+                <option key={f.id} value={f.id}>
+                  📁 {f.name}
+                </option>
+              ))}
             </StyledSelect>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 14, fontSize: 12.5, color: C.inkSoft }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              marginBottom: 14,
+              fontSize: 12.5,
+              color: C.inkSoft,
+            }}
+          >
             <span style={{ flexShrink: 0 }}>PDF 페이지</span>
-            <PageInput value={pageFrom} onChange={(e) => setPageFrom(e.target.value)} placeholder="시작" disabled={indexing} />
+            <PageInput
+              value={pageFrom}
+              onChange={(e) => setPageFrom(e.target.value)}
+              placeholder="시작"
+              disabled={indexing}
+            />
             <span>~</span>
-            <PageInput value={pageTo} onChange={(e) => setPageTo(e.target.value)} placeholder="끝" disabled={indexing} />
+            <PageInput
+              value={pageTo}
+              onChange={(e) => setPageTo(e.target.value)}
+              placeholder="끝"
+              disabled={indexing}
+            />
           </div>
         </>
       ) : (
@@ -371,15 +614,20 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
             <input
               value={urlInput}
               onChange={(e) => setUrlInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && !indexing) uploadUrl(); }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !indexing) uploadUrl();
+              }}
               placeholder="https://…"
               disabled={indexing}
               style={{
-                flex: 1, padding: "8px 11px",
+                flex: 1,
+                padding: "8px 11px",
                 borderRadius: "var(--radius-sm)",
                 border: `1px solid ${C.line}`,
-                fontFamily: sans, fontSize: 13,
-                background: C.paper, color: C.ink,
+                fontFamily: sans,
+                fontSize: 13,
+                background: C.paper,
+                color: C.ink,
                 outline: "none",
               }}
             />
@@ -390,19 +638,50 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
                 border: "none",
                 background: indexing || !urlInput.trim() ? C.line : C.accent,
                 color: indexing || !urlInput.trim() ? C.inkSoft : "#fff",
-                padding: "8px 14px", borderRadius: "var(--radius-sm)",
-                fontSize: 13, cursor: indexing || !urlInput.trim() ? "default" : "pointer", fontFamily: sans,
+                padding: "8px 14px",
+                borderRadius: "var(--radius-sm)",
+                fontSize: 13,
+                cursor: indexing || !urlInput.trim() ? "default" : "pointer",
+                fontFamily: sans,
               }}
-            >{indexing ? "…" : "추가"}</button>
+            >
+              {indexing ? "…" : "추가"}
+            </button>
           </div>
           <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}>
-            <StyledSelect value={targetFolderId ?? ""} onChange={(e) => setTargetFolderId(e.target.value || null)} disabled={indexing}>
+            <StyledSelect
+              value={targetFolderId ?? ""}
+              onChange={(e) => setTargetFolderId(e.target.value || null)}
+              disabled={indexing}
+            >
               <option value="">📄 루트</option>
-              {folders.map((f) => <option key={f.id} value={f.id}>📁 {f.name}</option>)}
+              {folders.map((f) => (
+                <option key={f.id} value={f.id}>
+                  📁 {f.name}
+                </option>
+              ))}
             </StyledSelect>
             {indexing && (
-              <span style={{ fontSize: 12.5, color: C.inkSoft, display: "flex", alignItems: "center", gap: 5 }}>
-                <span className="spin" style={{ width: 12, height: 12, border: `2px solid ${C.accentSoft}`, borderTopColor: C.accent, borderRadius: "50%", display: "inline-block" }} />
+              <span
+                style={{
+                  fontSize: 12.5,
+                  color: C.inkSoft,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 5,
+                }}
+              >
+                <span
+                  className="spin"
+                  style={{
+                    width: 12,
+                    height: 12,
+                    border: `2px solid ${C.accentSoft}`,
+                    borderTopColor: C.accent,
+                    borderRadius: "50%",
+                    display: "inline-block",
+                  }}
+                />
                 {spinnerMsg}
               </span>
             )}
@@ -411,7 +690,17 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
       )}
 
       {indexError && (
-        <div style={{ color: "#dc2626", fontSize: 12.5, marginBottom: 10, padding: "6px 10px", background: "#fef2f2", borderRadius: "var(--radius-sm)", border: "1px solid #fecaca" }}>
+        <div
+          style={{
+            color: "#dc2626",
+            fontSize: 12.5,
+            marginBottom: 10,
+            padding: "6px 10px",
+            background: "#fef2f2",
+            borderRadius: "var(--radius-sm)",
+            border: "1px solid #fecaca",
+          }}
+        >
           {indexError}
         </div>
       )}
@@ -421,14 +710,61 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
         {showNewFolder ? (
           <div style={{ display: "flex", gap: 5 }}>
             <input
-              autoFocus value={newFolderName}
+              autoFocus
+              value={newFolderName}
               onChange={(e) => setNewFolderName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") handleCreateFolder(); if (e.key === "Escape") { setShowNewFolder(false); setNewFolderName(""); } }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleCreateFolder();
+                if (e.key === "Escape") {
+                  setShowNewFolder(false);
+                  setNewFolderName("");
+                }
+              }}
               placeholder="폴더 이름"
-              style={{ flex: 1, padding: "5px 9px", borderRadius: "var(--radius-sm)", border: `1px solid ${C.accent}`, fontFamily: sans, fontSize: 12.5, background: C.card, outline: "none" }}
+              style={{
+                flex: 1,
+                padding: "5px 9px",
+                borderRadius: "var(--radius-sm)",
+                border: `1px solid ${C.accent}`,
+                fontFamily: sans,
+                fontSize: 12.5,
+                background: C.card,
+                outline: "none",
+              }}
             />
-            <button onClick={handleCreateFolder} style={{ border: "none", background: C.accent, color: "#fff", padding: "5px 11px", borderRadius: "var(--radius-sm)", fontSize: 12.5, cursor: "pointer", fontFamily: sans }}>만들기</button>
-            <button onClick={() => { setShowNewFolder(false); setNewFolderName(""); }} style={{ border: `1px solid ${C.line}`, background: "transparent", color: C.inkSoft, padding: "5px 9px", borderRadius: "var(--radius-sm)", fontSize: 12.5, cursor: "pointer", fontFamily: sans }}>취소</button>
+            <button
+              onClick={handleCreateFolder}
+              style={{
+                border: "none",
+                background: C.accent,
+                color: "#fff",
+                padding: "5px 11px",
+                borderRadius: "var(--radius-sm)",
+                fontSize: 12.5,
+                cursor: "pointer",
+                fontFamily: sans,
+              }}
+            >
+              만들기
+            </button>
+            <button
+              onClick={() => {
+                setShowNewFolder(false);
+                setNewFolderName("");
+              }}
+              style={{
+                border: `1px solid ${C.line}`,
+                background: "transparent",
+                color: C.inkSoft,
+                padding: "5px 9px",
+                borderRadius: "var(--radius-sm)",
+                fontSize: 12.5,
+                cursor: "pointer",
+                fontFamily: sans,
+              }}
+            >
+              취소
+            </button>
           </div>
         ) : (
           <button
@@ -445,14 +781,28 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
               width: "100%",
               transition: "all .15s",
             }}
-          >+ 새 폴더</button>
+          >
+            + 새 폴더
+          </button>
         )}
       </div>
 
       {/* 문서 검색 */}
       {docs.length > 0 && (
         <div style={{ marginBottom: 10, position: "relative" }}>
-          <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 13, color: C.inkSoft, pointerEvents: "none" }}>🔍</span>
+          <span
+            style={{
+              position: "absolute",
+              left: 9,
+              top: "50%",
+              transform: "translateY(-50%)",
+              fontSize: 13,
+              color: C.inkSoft,
+              pointerEvents: "none",
+            }}
+          >
+            🔍
+          </span>
           <input
             value={docSearch}
             onChange={(e) => setDocSearch(e.target.value)}
@@ -462,9 +812,12 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
               padding: "6px 10px 6px 30px",
               borderRadius: "var(--radius-sm)",
               border: `1px solid ${C.line}`,
-              fontFamily: sans, fontSize: 12.5,
-              background: C.paper, color: C.ink,
-              outline: "none", boxSizing: "border-box",
+              fontFamily: sans,
+              fontSize: 12.5,
+              background: C.paper,
+              color: C.ink,
+              outline: "none",
+              boxSizing: "border-box",
             }}
           />
         </div>
@@ -473,25 +826,50 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
       {/* 자료 목록 */}
       <div style={{ display: "grid", gap: 5 }}>
         {docs.length === 0 && !indexing && (
-          <div style={{ color: C.inkSoft, fontSize: 13, padding: "12px 2px", textAlign: "center", lineHeight: 1.6 }}>
+          <div
+            style={{
+              color: C.inkSoft,
+              fontSize: 13,
+              padding: "12px 2px",
+              textAlign: "center",
+              lineHeight: 1.6,
+            }}
+          >
             <div style={{ fontSize: 28, marginBottom: 8, opacity: 0.4 }}>📂</div>
             PDF를 추가해 시작하세요.
           </div>
         )}
         {docSearch && filteredDocs.length === 0 && (
-          <div style={{ color: C.inkSoft, fontSize: 12.5, padding: "6px 2px" }}>일치하는 자료가 없어요.</div>
+          <div style={{ color: C.inkSoft, fontSize: 12.5, padding: "6px 2px" }}>
+            일치하는 자료가 없어요.
+          </div>
         )}
 
         {visibleFolders.map((folder) => (
-          <FolderRow key={folder.id} folder={folder} docs={filteredDocs} docsHook={docsHook} onDrop={handleDocDrop} />
+          <FolderRow
+            key={folder.id}
+            folder={folder}
+            docs={filteredDocs}
+            docsHook={docsHook}
+            onDrop={handleDocDrop}
+          />
         ))}
 
         <div
-          onDragOver={(e) => { e.preventDefault(); setRootDropOver(true); }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            setRootDropOver(true);
+          }}
           onDragLeave={() => setRootDropOver(false)}
-          onDrop={(e) => { e.preventDefault(); setRootDropOver(false); const d = e.dataTransfer.getData("docId"); if (d) handleDocDrop(d, null); }}
+          onDrop={(e) => {
+            e.preventDefault();
+            setRootDropOver(false);
+            const d = e.dataTransfer.getData("docId");
+            if (d) handleDocDrop(d, null);
+          }}
           style={{
-            display: "grid", gap: 4,
+            display: "grid",
+            gap: 4,
             borderRadius: "var(--radius-sm)",
             padding: rootDropOver ? 5 : 0,
             border: rootDropOver ? `1.5px dashed ${C.accent}` : "1.5px dashed transparent",
@@ -499,11 +877,15 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
           }}
         >
           {rootDocs.length === 0 && folders.length > 0 && (
-            <div style={{ fontSize: 11.5, color: C.inkSoft, padding: "4px 6px", textAlign: "center" }}>
+            <div
+              style={{ fontSize: 11.5, color: C.inkSoft, padding: "4px 6px", textAlign: "center" }}
+            >
               드래그해서 루트로 이동
             </div>
           )}
-          {rootDocs.map((d) => <DocRow key={d.id} doc={d} docsHook={docsHook} />)}
+          {rootDocs.map((d) => (
+            <DocRow key={d.id} doc={d} docsHook={docsHook} />
+          ))}
         </div>
       </div>
     </section>
@@ -519,25 +901,32 @@ function StyledSelect({ children, ...props }) {
         padding: "5px 8px",
         borderRadius: "var(--radius-sm)",
         border: `1px solid ${C.line}`,
-        fontFamily: sans, fontSize: 12.5,
-        background: C.paper, color: C.ink,
+        fontFamily: sans,
+        fontSize: 12.5,
+        background: C.paper,
+        color: C.ink,
         cursor: "pointer",
       }}
-    >{children}</select>
+    >
+      {children}
+    </select>
   );
 }
 
 function PageInput(props) {
   return (
     <input
-      type="number" min={1}
+      type="number"
+      min={1}
       {...props}
       style={{
-        flex: 1, minWidth: 0,
+        flex: 1,
+        minWidth: 0,
         padding: "5px 7px",
         borderRadius: "var(--radius-sm)",
         border: `1px solid ${C.line}`,
-        fontFamily: sans, fontSize: 12.5,
+        fontFamily: sans,
+        fontSize: 12.5,
         background: C.paper,
         outline: "none",
       }}
