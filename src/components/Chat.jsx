@@ -308,9 +308,13 @@ export default function Chat({ chat, docs: docsHook }) {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [conversation.length, result?.answer, scrollRef]);
 
+  const exportMenuRef = useRef(null);
   useEffect(() => {
     if (!showExportMenu) return;
-    const close = () => setShowExportMenu(false);
+    const close = (e) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target))
+        setShowExportMenu(false);
+    };
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, [showExportMenu]);
@@ -362,7 +366,7 @@ export default function Chat({ chat, docs: docsHook }) {
             padding: "12px 16px 0",
           }}
         >
-          <div style={{ position: "relative" }}>
+          <div ref={exportMenuRef} style={{ position: "relative" }}>
             <GhostBtn onClick={() => setShowExportMenu((v) => !v)}>내보내기 ▾</GhostBtn>
             {showExportMenu && (
               <div
