@@ -17,6 +17,9 @@
   --c-sidebar-hover: rgba(255, 255, 255, 0.06);
   --c-sidebar-active: rgba(91, 82, 214, 0.24);
   --c-user-bubble: #5b52d6;
+  --c-error: #dc2626;
+  --c-error-soft: #fef2f2;
+  --c-error-line: #fecaca;
   --shadow-xs: 0 1px 3px rgba(16, 18, 46, 0.06), 0 1px 2px rgba(16, 18, 46, 0.04);
   --shadow-sm: 0 2px 8px rgba(16, 18, 46, 0.08);
   --shadow-md: 0 4px 20px rgba(16, 18, 46, 0.1);
@@ -42,6 +45,9 @@
   --c-sidebar-hover: rgba(255, 255, 255, 0.04);
   --c-sidebar-active: rgba(123, 115, 245, 0.2);
   --c-user-bubble: #7b73f5;
+  --c-error: #f87171;
+  --c-error-soft: rgba(239, 68, 68, 0.12);
+  --c-error-line: rgba(239, 68, 68, 0.3);
   --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.3);
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.35);
   --shadow-md: 0 4px 20px rgba(0, 0, 0, 0.4);
@@ -60,6 +66,7 @@ body,
 body {
   margin: 0;
   background: var(--c-paper);
+  color: var(--c-ink);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;

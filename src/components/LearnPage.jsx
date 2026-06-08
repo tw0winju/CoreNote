@@ -335,9 +335,9 @@ function QuizPanel({ docs, folders }) {
         <div
           style={{
             fontSize: 13,
-            color: "#e74c3c",
+            color: C.error,
             padding: "8px 12px",
-            background: "#fdf2f2",
+            background: C.errorSoft,
             borderRadius: 8,
             flexShrink: 0,
           }}
@@ -365,6 +365,7 @@ function QuizPanel({ docs, folders }) {
               fontSize: 14,
               lineHeight: 1.6,
               fontWeight: 500,
+              color: C.ink,
             }}
           >
             {q.q}

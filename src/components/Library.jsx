@@ -122,6 +122,7 @@ function FolderRow({ folder, docs, docsHook, onDrop }) {
                 fontFamily: sans,
                 fontSize: 13,
                 background: C.card,
+                color: C.ink,
               }}
             />
           ) : (
@@ -240,6 +241,7 @@ function DocRow({ doc, docsHook }) {
               fontFamily: sans,
               fontSize: 12.5,
               background: C.card,
+              color: C.ink,
             }}
           />
         ) : (
@@ -692,13 +694,13 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
       {indexError && (
         <div
           style={{
-            color: "#dc2626",
+            color: C.error,
             fontSize: 12.5,
             marginBottom: 10,
             padding: "6px 10px",
-            background: "#fef2f2",
+            background: C.errorSoft,
             borderRadius: "var(--radius-sm)",
-            border: "1px solid #fecaca",
+            border: `1px solid ${C.errorLine}`,
           }}
         >
           {indexError}
@@ -729,6 +731,7 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
                 fontFamily: sans,
                 fontSize: 12.5,
                 background: C.card,
+                color: C.ink,
                 outline: "none",
               }}
             />
@@ -928,6 +931,7 @@ function PageInput(props) {
         fontFamily: sans,
         fontSize: 12.5,
         background: C.paper,
+        color: C.ink,
         outline: "none",
       }}
     />

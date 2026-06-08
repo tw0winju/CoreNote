@@ -14,6 +14,9 @@ export const C = {
   sidebarHover: "var(--c-sidebar-hover)",
   sidebarActive: "var(--c-sidebar-active)",
   userBubble: "var(--c-user-bubble)",
+  error: "var(--c-error)",
+  errorSoft: "var(--c-error-soft)",
+  errorLine: "var(--c-error-line)",
 };
 
 export const shadow = {

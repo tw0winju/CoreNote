@@ -750,7 +750,7 @@ export default function Chat({ chat, docs: docsHook }) {
             }}
           >
             {askError && (
-              <span style={{ fontSize: 12.5, color: "#dc2626", flex: 1 }}>{askError}</span>
+              <span style={{ fontSize: 12.5, color: C.error, flex: 1 }}>{askError}</span>
             )}
 
             <button
