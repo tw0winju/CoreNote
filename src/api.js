@@ -53,7 +53,7 @@ export const postIndexUrl = (url, folderId = null) =>
   });
 
 // ── 질문 ──────────────────────────────────────────────────────────────────────
-export const postAsk = (question, history, docIds, image = null) =>
+export const postAsk = (question, history, docIds, image = null, signal = null) =>
   fetch("/api/ask", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -63,6 +63,7 @@ export const postAsk = (question, history, docIds, image = null) =>
       ...(docIds?.size > 0 && { docIds: [...docIds] }),
       ...(image && { image }),
     }),
+    ...(signal && { signal }),
   });
 
 // ── 설정 ──────────────────────────────────────────────────────────────────────
@@ -107,26 +108,32 @@ export const postSummary = (docId) =>
 
 // ── SSE 파서 ──────────────────────────────────────────────────────────────────
 // error 이벤트는 자동으로 throw. 나머지는 handlers[type](event)로 디스패치.
-export async function readSSE(response, handlers) {
+export async function readSSE(response, handlers, signal = null) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buf = "";
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, { stream: true });
-    const lines = buf.split("\n");
-    buf = lines.pop();
-    for (const line of lines) {
-      if (!line.startsWith("data: ")) continue;
-      let event;
-      try {
-        event = JSON.parse(line.slice(6));
-      } catch {
-        continue;
+  try {
+    while (true) {
+      if (signal?.aborted) { reader.cancel(); break; }
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split("\n");
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        let event;
+        try {
+          event = JSON.parse(line.slice(6));
+        } catch {
+          continue;
+        }
+        if (event.type === "error") throw new Error(event.error);
+        await handlers[event.type]?.(event);
       }
-      if (event.type === "error") throw new Error(event.error);
-      await handlers[event.type]?.(event);
     }
+  } catch (e) {
+    reader.cancel().catch(() => {});
+    throw e;
   }
 }

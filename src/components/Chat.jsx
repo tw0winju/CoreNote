@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { C, sans } from "../theme";
 
@@ -264,10 +264,12 @@ export default function Chat({ chat, docs: docsHook }) {
     isFavorited,
     attachedImage,
     setAttachedImage,
+    cancelAsk,
   } = chat;
 
   const { selectedDocs, docs, setSelectedDocs } = docsHook;
   const imgInputRef = useRef(null);
+  const [lightbox, setLightbox] = useState(null);
 
   const handleImageFile = (file) => {
     if (!file || !file.type.startsWith("image/")) return;
@@ -294,6 +296,25 @@ export default function Chat({ chat, docs: docsHook }) {
         overflow: "hidden",
       }}
     >
+      {/* 라이트박스 */}
+      {lightbox && (
+        <div
+          onClick={() => setLightbox(null)}
+          style={{
+            position: "fixed", inset: 0, zIndex: 200,
+            background: "rgba(0,0,0,0.85)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "zoom-out",
+          }}
+        >
+          <img
+            src={lightbox}
+            alt="확대 이미지"
+            style={{ maxWidth: "90vw", maxHeight: "90vh", borderRadius: 10, objectFit: "contain", boxShadow: "0 8px 40px rgba(0,0,0,0.5)" }}
+          />
+        </div>
+      )}
+
       {/* ── 헤더 ── */}
       {conversation.length > 0 && (
         <div
@@ -385,7 +406,8 @@ export default function Chat({ chat, docs: docsHook }) {
                   <img
                     src={item.image}
                     alt="첨부 이미지"
-                    style={{ display: "block", maxWidth: "100%", maxHeight: 160, borderRadius: 6, marginBottom: 6, objectFit: "contain" }}
+                    onClick={() => setLightbox(item.image)}
+                    style={{ display: "block", maxWidth: "100%", maxHeight: 160, borderRadius: 6, marginBottom: 6, objectFit: "contain", cursor: "zoom-in" }}
                   />
                 )}
                 {item.q}
@@ -683,23 +705,42 @@ export default function Chat({ chat, docs: docsHook }) {
               lineHeight: 1,
             }}
           >🖼</button>
-          <button
-            onClick={() => ask(selectedDocs)}
-            disabled={asking || !question.trim() || docs.length === 0}
-            style={{
-              border: "none",
-              background: asking || !question.trim() || docs.length === 0 ? C.line : C.ink,
-              color: C.paper,
-              padding: "9px 22px",
-              borderRadius: 10,
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: asking || !question.trim() || docs.length === 0 ? "default" : "pointer",
-              flexShrink: 0,
-            }}
-          >
-            {asking ? "찾는 중…" : "질문"}
-          </button>
+          {asking ? (
+            <button
+              onClick={cancelAsk}
+              style={{
+                border: `1px solid ${C.accent}`,
+                background: "transparent",
+                color: C.accent,
+                padding: "9px 22px",
+                borderRadius: 10,
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: "pointer",
+                flexShrink: 0,
+              }}
+            >
+              ■ 중단
+            </button>
+          ) : (
+            <button
+              onClick={() => ask(selectedDocs)}
+              disabled={!question.trim() || docs.length === 0}
+              style={{
+                border: "none",
+                background: !question.trim() || docs.length === 0 ? C.line : C.ink,
+                color: C.paper,
+                padding: "9px 22px",
+                borderRadius: 10,
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: !question.trim() || docs.length === 0 ? "default" : "pointer",
+                flexShrink: 0,
+              }}
+            >
+              질문
+            </button>
+          )}
         </div>
       </div>
     </section>

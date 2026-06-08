@@ -167,8 +167,16 @@ export default function useChat(onMemoryExtracted) {
   const isFavorited = (q, a) => favorites.some((f) => f.q === q && f.a === a);
 
   const [attachedImage, setAttachedImage] = useState(null); // { base64, name, preview }
+  const abortRef = useRef(null);
+
+  const cancelAsk = () => {
+    abortRef.current?.abort();
+  };
 
   const _doAsk = async (q, history, selectedDocs, image = null) => {
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setAsking(true);
     setAskError("");
     setResult(null);
@@ -182,15 +190,13 @@ export default function useChat(onMemoryExtracted) {
       return next;
     });
 
+    let answer = "", sources = [];
     try {
-      const r = await postAsk(q, history, selectedDocs, image?.base64 ?? null);
+      const r = await postAsk(q, history, selectedDocs, image?.base64 ?? null, controller.signal);
       if (!r.ok) {
         const d = await r.json();
         throw new Error(d.error || "질문 처리 실패");
       }
-
-      let answer = "",
-        sources = [];
       await readSSE(r, {
         status: (e) => setResult((p) => ({ ...(p || { sources: [], answer: "" }), status: e.message })),
         token: (e) => {
@@ -202,7 +208,7 @@ export default function useChat(onMemoryExtracted) {
           sources = e.sources;
           setResult((p) => ({ ...(p || { answer: "" }), sources }));
         },
-      });
+      }, controller.signal);
 
       setConversation((prev) => [...prev, { q, a: answer, sources, image: image?.preview ?? null }]);
       setResult(null);
@@ -215,9 +221,17 @@ export default function useChat(onMemoryExtracted) {
       setTimeout(scrollToBottom, 50);
     } catch (e) {
       setResult(null);
-      setAskError(e.message || "질문 처리 중 오류가 발생했어요.");
+      if (e.name !== "AbortError") {
+        setAskError(e.message || "질문 처리 중 오류가 발생했어요.");
+      } else if (answer) {
+        // 취소 시 지금까지 받은 답변 저장
+        setConversation((prev) => [...prev, { q, a: answer, sources, image: image?.preview ?? null }]);
+        setQuestion("");
+        setAttachedImage(null);
+      }
     } finally {
       setAsking(false);
+      abortRef.current = null;
     }
   };
 
@@ -278,5 +292,6 @@ export default function useChat(onMemoryExtracted) {
     isFavorited,
     attachedImage,
     setAttachedImage,
+    cancelAsk,
   };
 }
