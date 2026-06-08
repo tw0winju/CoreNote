@@ -282,8 +282,6 @@ export default function Chat({ chat, docs: docsHook }) {
     regenerate,
     navigateHistory,
     scrollRef,
-    toggleFavorite,
-    isFavorited,
     attachedImage,
     setAttachedImage,
     cancelAsk,
@@ -437,18 +435,11 @@ export default function Chat({ chat, docs: docsHook }) {
               />
 
               {/* 액션 버튼 */}
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 5 }}>
-                <GhostBtn
-                  onClick={() => toggleFavorite(item)}
-                  active={isFavorited(item.q, item.a)}
-                  title={isFavorited(item.q, item.a) ? "즐겨찾기 해제" : "즐겨찾기 저장"}
-                >
-                  {isFavorited(item.q, item.a) ? "★ 저장됨" : "☆ 저장"}
-                </GhostBtn>
-                {isLast && !asking && (
+              {isLast && !asking && (
+                <div style={{ display: "flex", justifyContent: "flex-end" }}>
                   <GhostBtn onClick={() => regenerate(selectedDocs)}>↺ 재생성</GhostBtn>
-                )}
-              </div>
+                </div>
+              )}
 
               {/* 출처 */}
               {item.sources?.length > 0 && (

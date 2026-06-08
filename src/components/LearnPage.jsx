@@ -118,125 +118,6 @@ function DocTree({ docs, folders, selectedId, onSelect }) {
   );
 }
 
-// ── 즐겨찾기 ─────────────────────────────────────────────────────────────────
-
-function FavoritesPanel({ favorites, onRemove }) {
-  const [expandedId, setExpandedId] = useState(null);
-
-  if (favorites.length === 0) {
-    return (
-      <div
-        style={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          color: C.inkSoft,
-          fontSize: 13,
-          gap: 8,
-          padding: 24,
-        }}
-      >
-        <div style={{ fontSize: 28 }}>☆</div>
-        <div style={{ textAlign: "center", lineHeight: 1.7 }}>
-          아직 저장된 항목이 없어요.
-          <br />
-          대화에서 ☆ 버튼으로 저장해보세요.
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8, overflowY: "auto" }}>
-      {favorites.map((f) => {
-        const isOpen = expandedId === f.id;
-        return (
-          <div
-            key={f.id}
-            style={{
-              background: C.card,
-              border: `1px solid ${C.line}`,
-              borderRadius: 10,
-              overflow: "hidden",
-            }}
-          >
-            <div
-              onClick={() => setExpandedId(isOpen ? null : f.id)}
-              style={{
-                padding: "10px 12px",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "flex-start",
-                gap: 8,
-              }}
-            >
-              <div
-                style={{
-                  flex: 1,
-                  fontSize: 13,
-                  fontWeight: 500,
-                  color: C.ink,
-                  lineHeight: 1.5,
-                  overflow: "hidden",
-                  display: "-webkit-box",
-                  WebkitLineClamp: isOpen ? "unset" : 2,
-                  WebkitBoxOrient: "vertical",
-                  textOverflow: "ellipsis",
-                }}
-              >
-                {f.q}
-              </div>
-              <div style={{ display: "flex", gap: 4, flexShrink: 0, alignItems: "center" }}>
-                <span style={{ fontSize: 10, color: C.inkSoft }}>
-                  {new Date(f.savedAt).toLocaleDateString("ko-KR", {
-                    month: "numeric",
-                    day: "numeric",
-                  })}
-                </span>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onRemove(f.id);
-                  }}
-                  style={{
-                    border: "none",
-                    background: "transparent",
-                    color: C.inkSoft,
-                    fontSize: 14,
-                    cursor: "pointer",
-                    padding: "0 2px",
-                    lineHeight: 1,
-                  }}
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-            {isOpen && (
-              <div
-                style={{
-                  padding: "0 12px 12px",
-                  borderTop: `1px dashed ${C.line}`,
-                  paddingTop: 10,
-                  fontSize: 13,
-                  lineHeight: 1.65,
-                  color: C.ink,
-                  maxHeight: 240,
-                  overflowY: "auto",
-                }}
-              >
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{f.a}</ReactMarkdown>
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 // ── 퀴즈 ─────────────────────────────────────────────────────────────────────
 
 const QUIZ_TYPES = [
@@ -1241,11 +1122,9 @@ function SummaryPanel({ docs, folders }) {
 const TABS = [
   { id: "summary", label: "📄 요약" },
   { id: "quiz", label: "🎯 퀴즈" },
-  { id: "favorites", label: "★ 즐겨찾기" },
 ];
 
-export default function LearnPage({ chat, docs: docsHook }) {
-  const { favorites, removeFavorite } = chat;
+export default function LearnPage({ chat: _chat, docs: docsHook }) {
   const { docs, folders } = docsHook;
   const [activeTab, setActiveTab] = useState("summary");
 
@@ -1291,26 +1170,9 @@ export default function LearnPage({ chat, docs: docsHook }) {
                 cursor: "pointer",
                 transition: "all .15s",
                 boxShadow: active ? "var(--shadow-xs)" : "none",
-                display: "flex",
-                alignItems: "center",
-                gap: 5,
               }}
             >
               {tab.label}
-              {tab.id === "favorites" && favorites.length > 0 && (
-                <span
-                  style={{
-                    fontSize: 10.5,
-                    background: active ? C.accentSoft : C.line,
-                    color: active ? C.accent : C.inkSoft,
-                    borderRadius: 99,
-                    padding: "1px 6px",
-                    fontWeight: 600,
-                  }}
-                >
-                  {favorites.length}
-                </span>
-              )}
             </button>
           );
         })}
@@ -1318,11 +1180,6 @@ export default function LearnPage({ chat, docs: docsHook }) {
 
       {/* 탭 콘텐츠 */}
       <div style={{ flex: 1, overflow: "hidden", minHeight: 0 }}>
-        {activeTab === "favorites" && (
-          <div style={{ height: "100%", overflowY: "auto" }}>
-            <FavoritesPanel favorites={favorites} onRemove={removeFavorite} />
-          </div>
-        )}
         {activeTab === "quiz" && (
           <div style={{ height: "100%", overflowY: "auto" }}>
             <QuizPanel docs={docs} folders={folders} />
