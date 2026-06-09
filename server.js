@@ -1108,8 +1108,7 @@ app.post("/api/ask", async (req, res) => {
         }
         const combined = tail + token;
         tail = "";
-        const out = combined.replace(/```(?:\w+\n?)?/g, "");
-        if (out) send({ type: "token", text: out });
+        if (combined) send({ type: "token", text: combined });
       };
 
       const reader2 = ollamaRes.body.getReader();
@@ -1129,10 +1128,7 @@ app.post("/api/ask", async (req, res) => {
           } catch {}
         }
       }
-      if (!inThink && tail) {
-        const c = tail.replace(/```(?:\w+\n?)?/g, "");
-        if (c) send({ type: "token", text: c });
-      }
+      if (!inThink && tail) send({ type: "token", text: tail });
       return res.end();
     }
     // ────────────────────────────────────────────────────────────────────────
@@ -1286,8 +1282,7 @@ app.post("/api/ask", async (req, res) => {
           }
         }
       }
-      const cleaned = out.replace(/```(?:\w+\n?)?/g, "");
-      if (cleaned) send({ type: "token", text: cleaned });
+      if (out) send({ type: "token", text: out });
     };
 
     const reader = ollamaRes.body.getReader();
@@ -1307,10 +1302,7 @@ app.post("/api/ask", async (req, res) => {
         } catch {}
       }
     }
-    if (!inThink && tail) {
-      const c = tail.replace(/```(?:\w+\n?)?/g, "");
-      if (c) send({ type: "token", text: c });
-    }
+    if (!inThink && tail) send({ type: "token", text: tail });
     res.end();
   } catch (e) {
     sseErr(send, e);
