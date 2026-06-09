@@ -105,18 +105,26 @@ export default function useChat(onMemoryExtracted) {
       return;
     }
 
+    const tocItems = conversation
+      .map(
+        (item, i) =>
+          `<a href="#q${i + 1}" class="toc-btn">Q${i + 1}. ${escHtml(item.q.substring(0, 28))}${item.q.length > 28 ? "…" : ""}</a>`,
+      )
+      .join("");
+
     const turns = conversation
       .map(
-        (item) => `
-  <div class="turn">
-    <div class="user-row">
-      ${item.image ? `<img src="${item.image}" class="user-img" alt="첨부 이미지">` : ""}
-      <div class="user-bubble">${escHtml(item.q).replace(/\n/g, "<br>")}</div>
+        (item, i) => `
+  <div class="qa-card" id="q${i + 1}">
+    <div class="qa-q">
+      <div class="qa-num">${i + 1}</div>
+      <div class="qa-q-text">${escHtml(item.q).replace(/\n/g, "<br>")}</div>
     </div>
-    <div class="asst-bubble">${mdToHtml(item.a)}</div>
+    ${item.image ? `<div class="qa-img-wrap"><img src="${item.image}" class="qa-img" alt="첨부 이미지"></div>` : ""}
+    <div class="qa-a">${mdToHtml(item.a)}</div>
     ${
       item.sources?.length > 0
-        ? `<div class="sources"><span class="src-label">출처</span>${item.sources.map((s) => `<span class="src-chip">${escHtml(s.docName)}</span>`).join("")}</div>`
+        ? `<div class="qa-sources"><span class="src-label">출처</span>${item.sources.map((s) => `<span class="src-chip">${escHtml(s.docName)}</span>`).join("")}</div>`
         : ""
     }
   </div>`,
@@ -130,131 +138,115 @@ export default function useChat(onMemoryExtracted) {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>코어노트 대화 기록</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    --bg: #f5f6fb; --card: #ffffff; --ink: #16182e; --ink-soft: #6b7090;
-    --accent: #5b52d6; --accent-soft: #ede9ff; --line: rgba(16,18,46,.09);
-    --code-bg: #ebecf5; --code-bg2: #282c34; --src-bg: #f0f0f8; --src-color: #6b7090;
-    --shadow: 0 2px 8px rgba(16,18,46,.08);
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #0d0e16; --card: #191b28; --ink: #dfe1f0; --ink-soft: #7a7f9e;
-      --accent: #7b73f5; --accent-soft: #221d48; --line: rgba(255,255,255,.07);
-      --code-bg: #12141e; --code-bg2: #0d0e16; --src-bg: #12141e; --src-color: #7a7f9e;
-      --shadow: 0 2px 8px rgba(0,0,0,.35);
-    }
+    --bg: #0f1117; --surface: #1a1d27; --surface2: #242736;
+    --border: #2e3347; --accent: #7c6af5; --accent2: #4ecdc4;
+    --text: #e8eaf0; --text-muted: #8b91a8;
   }
 
-  body {
-    font-family: "IBM Plex Sans KR", -apple-system, sans-serif;
-    background: var(--bg); color: var(--ink);
-    font-size: 15px; line-height: 1.7;
-    padding: 0; margin: 0;
-  }
+  body { font-family: "Noto Sans KR", -apple-system, sans-serif; background: var(--bg); color: var(--text); font-size: 15px; line-height: 1.7; }
 
+  /* 헤더 */
   .page-header {
-    position: sticky; top: 0; z-index: 10;
-    background: var(--card); border-bottom: 1px solid var(--line);
-    padding: 14px 20px; display: flex; align-items: baseline; gap: 10px;
-    box-shadow: var(--shadow);
+    position: sticky; top: 0; z-index: 100;
+    background: linear-gradient(135deg, #1a1d27 0%, #242736 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    box-shadow: 0 2px 20px rgba(0,0,0,.45);
   }
-  .page-header h1 { font-size: 16px; font-weight: 600; }
-  .page-header .meta { font-size: 12px; color: var(--ink-soft); }
+  .header-inner { max-width: 920px; margin: 0 auto; display: flex; align-items: baseline; justify-content: space-between; }
+  .header-title { font-size: 17px; font-weight: 600; color: var(--text); }
+  .header-title span { color: var(--accent); }
+  .header-meta { font-size: 12px; color: var(--text-muted); }
 
-  .chat-wrap { max-width: 780px; margin: 0 auto; padding: 20px 16px 40px; display: flex; flex-direction: column; gap: 24px; }
+  /* TOC */
+  .toc-bar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 10px 0; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; }
+  .toc-bar::-webkit-scrollbar { height: 3px; }
+  .toc-bar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .toc-inner { display: inline-flex; gap: 8px; padding: 0 24px; }
+  .toc-btn {
+    display: inline-block; background: var(--surface2); color: var(--text-muted);
+    border-radius: 20px; padding: 5px 14px; font-size: 12.5px; text-decoration: none;
+    border: 1px solid var(--border); white-space: nowrap;
+    max-width: 200px; overflow: hidden; text-overflow: ellipsis;
+  }
+  .toc-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
 
-  .turn { display: flex; flex-direction: column; gap: 8px; }
+  /* 본문 */
+  .content { max-width: 920px; margin: 0 auto; padding: 28px 24px 60px; display: flex; flex-direction: column; gap: 28px; }
 
-  /* 사용자 버블 */
-  .user-row { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
-  .user-img { max-width: min(260px, 70%); border-radius: 10px; object-fit: contain; }
-  .user-bubble {
-    background: var(--accent); color: #fff;
-    border-radius: 16px 4px 16px 16px;
-    padding: 10px 15px; font-size: 14px; line-height: 1.6;
-    max-width: 80%; word-break: break-word;
-    box-shadow: 0 1px 3px rgba(0,0,0,.15);
-  }
+  /* Q&A 카드 */
+  .qa-card { background: var(--surface); border-radius: 12px; border: 1px solid var(--border); overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,.3); }
 
-  /* 어시스턴트 버블 */
-  .asst-bubble {
-    background: var(--card);
-    border-radius: 4px 16px 16px 16px;
-    padding: 14px 16px; font-size: 14.5px; line-height: 1.75;
-    box-shadow: var(--shadow); word-break: break-word;
-  }
-  .asst-bubble p { margin: 0 0 8px; }
-  .asst-bubble p:last-child { margin-bottom: 0; }
-  .asst-bubble h1 { font-size: 17px; font-weight: 700; margin: 14px 0 6px; }
-  .asst-bubble h2 { font-size: 15px; font-weight: 700; margin: 12px 0 5px; }
-  .asst-bubble h3 { font-size: 14px; font-weight: 600; margin: 10px 0 4px; }
-  .asst-bubble ul, .asst-bubble ol { padding-left: 20px; margin: 4px 0 8px; }
-  .asst-bubble li { margin-bottom: 3px; line-height: 1.65; }
-  .asst-bubble strong { font-weight: 600; }
-  .asst-bubble em { font-style: italic; }
-  .asst-bubble blockquote {
-    border-left: 3px solid var(--accent-soft); padding-left: 12px;
-    margin: 8px 0; color: var(--ink-soft);
-  }
-  .asst-bubble code {
-    background: var(--code-bg); border-radius: 4px;
-    padding: 1px 5px; font-size: 13px; font-family: monospace;
-  }
-  .code-wrap {
-    border: 1px solid var(--line); border-radius: 8px;
-    overflow: hidden; margin: 8px 0;
-  }
-  .code-header {
-    background: var(--code-bg); color: var(--ink-soft);
-    font-size: 11px; font-family: monospace;
-    padding: 5px 12px; border-bottom: 1px solid var(--line);
-    letter-spacing: .04em;
-  }
-  .code-wrap pre {
-    background: var(--code-bg2, #1e1e2e);
-    padding: 12px 14px; overflow-x: auto; margin: 0;
-    white-space: pre; tab-size: 2;
-  }
-  .code-wrap pre code {
-    background: none; padding: 0; font-size: 13px;
-    line-height: 1.6; font-family: monospace;
-    white-space: pre;
-  }
-  .asst-bubble table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 13px; }
-  .asst-bubble th { border: 1px solid var(--line); padding: 4px 8px; background: var(--code-bg); font-weight: 600; }
-  .asst-bubble td { border: 1px solid var(--line); padding: 4px 8px; }
+  .qa-q { background: linear-gradient(135deg, #1e2035 0%, #252839 100%); padding: 18px 22px; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; gap: 12px; }
+  .qa-num { display: flex; align-items: center; justify-content: center; min-width: 26px; height: 26px; background: var(--accent); color: #fff; border-radius: 50%; font-size: 12px; font-weight: 700; flex-shrink: 0; margin-top: 2px; }
+  .qa-q-text { font-size: 15px; font-weight: 500; color: #f0f1ff; line-height: 1.6; word-break: break-word; }
+
+  .qa-img-wrap { padding: 0 22px; border-bottom: 1px solid var(--border); background: #13151f; }
+  .qa-img { max-width: 360px; width: 100%; border-radius: 6px; display: block; padding: 12px 0; }
+
+  .qa-a { padding: 20px 22px; }
+  .qa-a p { margin: 0 0 10px; color: var(--text); line-height: 1.75; }
+  .qa-a p:last-child { margin-bottom: 0; }
+  .qa-a h1 { font-size: 18px; font-weight: 700; margin: 18px 0 8px; color: var(--text); border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+  .qa-a h2 { font-size: 16px; font-weight: 700; margin: 14px 0 6px; color: var(--text); }
+  .qa-a h3 { font-size: 14.5px; font-weight: 600; margin: 12px 0 5px; color: var(--accent2); }
+  .qa-a ul, .qa-a ol { padding-left: 22px; margin: 6px 0 10px; }
+  .qa-a li { margin-bottom: 4px; line-height: 1.65; }
+  .qa-a strong { font-weight: 600; color: #fff; }
+  .qa-a em { font-style: italic; color: var(--text-muted); }
+  .qa-a blockquote { border-left: 3px solid var(--accent); padding: 8px 14px; margin: 10px 0; color: var(--text-muted); background: var(--surface2); border-radius: 0 6px 6px 0; }
+  .qa-a code { background: var(--surface2); color: var(--accent2); border-radius: 4px; padding: 1px 6px; font-size: 13px; font-family: "JetBrains Mono", monospace; }
+  .qa-a table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 13.5px; }
+  .qa-a th { border: 1px solid var(--border); padding: 7px 10px; background: var(--surface2); font-weight: 600; color: var(--accent2); }
+  .qa-a td { border: 1px solid var(--border); padding: 7px 10px; color: var(--text); }
+
+  /* 코드 블록 */
+  .code-wrap { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin: 12px 0; }
+  .code-header { background: var(--surface2); color: var(--text-muted); font-size: 11.5px; font-family: "JetBrains Mono", monospace; padding: 6px 14px; border-bottom: 1px solid var(--border); letter-spacing: .06em; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .dot-r { background: #ff5f57; } .dot-y { background: #ffbd2e; } .dot-g { background: #28c941; }
+  .lang-label { text-transform: uppercase; letter-spacing: .08em; }
+  .code-wrap pre { margin: 0; overflow-x: auto; tab-size: 2; }
+  .code-wrap pre code.hljs { font-family: "JetBrains Mono", monospace !important; font-size: 13px !important; line-height: 1.6 !important; display: block !important; padding: 14px !important; background: #1e2030 !important; }
 
   /* 출처 */
-  .sources { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; padding-left: 4px; }
-  .src-label { font-size: 11.5px; color: var(--ink-soft); margin-right: 2px; }
-  .src-chip {
-    font-size: 11.5px; color: var(--src-color);
-    background: var(--src-bg); border-radius: 5px;
-    padding: 2px 8px;
-  }
+  .qa-sources { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 12px 22px 18px; border-top: 1px solid var(--border); }
+  .src-label { font-size: 11.5px; color: var(--text-muted); margin-right: 4px; }
+  .src-chip { font-size: 11.5px; color: var(--accent2); background: rgba(78,205,196,.12); border: 1px solid rgba(78,205,196,.28); border-radius: 5px; padding: 2px 9px; }
 
   @media (max-width: 600px) {
-    .user-bubble { max-width: 90%; }
-    .asst-bubble { font-size: 14px; }
+    .content { padding: 16px 12px 40px; }
+    .qa-q, .qa-a { padding: 14px 16px; }
+    .qa-sources { padding: 10px 16px 14px; }
+    .header-inner { flex-direction: column; gap: 4px; }
+    .toc-inner { padding: 0 12px; }
   }
   @media print {
-    .page-header { position: static; box-shadow: none; }
-    .turn { break-inside: avoid; }
+    .page-header { position: static; }
+    .toc-bar { display: none; }
+    .qa-card { break-inside: avoid; box-shadow: none; }
   }
 </style>
 </head>
 <body>
 <div class="page-header">
-  <h1>코어노트 대화 기록</h1>
-  <span class="meta">${date} · ${conversation.length}개 대화</span>
+  <div class="header-inner">
+    <div class="header-title"><span>Core</span>Note 대화 기록</div>
+    <div class="header-meta">${date} · ${conversation.length}개 질문</div>
+  </div>
 </div>
-<div class="chat-wrap">
+<div class="toc-bar"><div class="toc-inner">${tocItems}</div></div>
+<div class="content">
 ${turns}
 </div>
+<script>document.addEventListener('DOMContentLoaded', () => { document.querySelectorAll('pre code[class^="language-"]').forEach(el => hljs.highlightElement(el)); });</script>
 </body>
 </html>`;
 
@@ -287,9 +279,12 @@ ${turns}
     // 코드 블록을 먼저 추출 — 언어명 캡처 후 헤더로 표시
     let s = md.replace(/```([\w]*)\n?([\s\S]*?)```/gm, (_, lang, code) => {
       const label = lang || "code";
+      const cls = lang ? ` class="language-${escHtml(lang)}"` : "";
       blocks.push(
-        `<div class="code-wrap"><div class="code-header">${escHtml(label)}</div>` +
-          `<pre><code>${escHtml(code)}</code></pre></div>`,
+        `<div class="code-wrap"><div class="code-header">` +
+          `<span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>` +
+          `<span class="lang-label">${escHtml(label)}</span></div>` +
+          `<pre><code${cls}>${escHtml(code)}</code></pre></div>`,
       );
       return `[[${MARK}${blocks.length - 1}]]`;
     });
