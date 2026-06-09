@@ -137,14 +137,14 @@ export default function useChat(onMemoryExtracted) {
   :root {
     --bg: #f5f6fb; --card: #ffffff; --ink: #16182e; --ink-soft: #6b7090;
     --accent: #5b52d6; --accent-soft: #ede9ff; --line: rgba(16,18,46,.09);
-    --code-bg: #ebecf5; --src-bg: #f0f0f8; --src-color: #6b7090;
+    --code-bg: #ebecf5; --code-bg2: #282c34; --src-bg: #f0f0f8; --src-color: #6b7090;
     --shadow: 0 2px 8px rgba(16,18,46,.08);
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #0d0e16; --card: #191b28; --ink: #dfe1f0; --ink-soft: #7a7f9e;
       --accent: #7b73f5; --accent-soft: #221d48; --line: rgba(255,255,255,.07);
-      --code-bg: #12141e; --src-bg: #12141e; --src-color: #7a7f9e;
+      --code-bg: #12141e; --code-bg2: #0d0e16; --src-bg: #12141e; --src-color: #7a7f9e;
       --shadow: 0 2px 8px rgba(0,0,0,.35);
     }
   }
@@ -204,11 +204,26 @@ export default function useChat(onMemoryExtracted) {
     background: var(--code-bg); border-radius: 4px;
     padding: 1px 5px; font-size: 13px; font-family: monospace;
   }
-  .asst-bubble pre {
-    background: var(--code-bg); border-radius: 8px;
-    padding: 12px 14px; overflow-x: auto; margin: 8px 0;
+  .code-wrap {
+    border: 1px solid var(--line); border-radius: 8px;
+    overflow: hidden; margin: 8px 0;
   }
-  .asst-bubble pre code { background: none; padding: 0; font-size: 13px; line-height: 1.5; }
+  .code-header {
+    background: var(--code-bg); color: var(--ink-soft);
+    font-size: 11px; font-family: monospace;
+    padding: 5px 12px; border-bottom: 1px solid var(--line);
+    letter-spacing: .04em;
+  }
+  .code-wrap pre {
+    background: var(--code-bg2, #1e1e2e);
+    padding: 12px 14px; overflow-x: auto; margin: 0;
+    white-space: pre; tab-size: 2;
+  }
+  .code-wrap pre code {
+    background: none; padding: 0; font-size: 13px;
+    line-height: 1.6; font-family: monospace;
+    white-space: pre;
+  }
   .asst-bubble table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 13px; }
   .asst-bubble th { border: 1px solid var(--line); padding: 4px 8px; background: var(--code-bg); font-weight: 600; }
   .asst-bubble td { border: 1px solid var(--line); padding: 4px 8px; }
@@ -266,15 +281,20 @@ ${turns}
   }
 
   function mdToHtml(md) {
-    // 코드 블록을 먼저 보호 (플레이스홀더로 치환)
-    const BLOCK = "CODEBLOCK";
+    const MARK = "CODEBLOCK";
     const blocks = [];
-    let s = md.replace(/```[\w]*\n?([\s\S]*?)```/gm, (_, code) => {
-      blocks.push(`<pre><code>${escHtml(code.trim())}</code></pre>`);
-      return `[[${BLOCK}${blocks.length - 1}]]`;
+
+    // 코드 블록을 먼저 추출 — 언어명 캡처 후 헤더로 표시
+    let s = md.replace(/```([\w]*)\n?([\s\S]*?)```/gm, (_, lang, code) => {
+      const label = lang || "code";
+      blocks.push(
+        `<div class="code-wrap"><div class="code-header">${escHtml(label)}</div>` +
+          `<pre><code>${escHtml(code)}</code></pre></div>`,
+      );
+      return `[[${MARK}${blocks.length - 1}]]`;
     });
 
-    // HTML 이스케이프
+    // HTML 이스케이프 (플레이스홀더는 영향 없음)
     s = s
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
@@ -303,6 +323,13 @@ ${turns}
     };
 
     for (const line of lines) {
+      // 코드 블록 플레이스홀더는 그대로 출력 (절대 <p>로 감싸지 않음)
+      if (line.includes(`[[${MARK}`)) {
+        flush();
+        out.push(line);
+        continue;
+      }
+
       const h3 = line.match(/^### (.+)/);
       const h2 = line.match(/^## (.+)/);
       const h1 = line.match(/^# (.+)/);
@@ -345,7 +372,7 @@ ${turns}
 
     let result = out.join("");
     blocks.forEach((b, i) => {
-      result = result.replace(`[[${BLOCK}${i}]]`, b);
+      result = result.replace(`[[${MARK}${i}]]`, b);
     });
     return result;
   }
