@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { C, sans, shadow } from "../theme";
 
 // ── 인용 번호 클릭 ────────────────────────────────────────────────────────────
@@ -90,8 +91,22 @@ const mdComponents = (onCitationClick) => ({
       {children}
     </blockquote>
   ),
-  code: ({ inline, children }) =>
-    inline ? (
+  code: ({ className, children }) => {
+    const isBlock = !!className;
+    return isBlock ? (
+      <pre
+        style={{
+          background: C.paper2,
+          padding: "12px 14px",
+          borderRadius: "var(--radius-sm)",
+          overflowX: "auto",
+          margin: "8px 0",
+          whiteSpace: "pre",
+        }}
+      >
+        <code style={{ fontFamily: "monospace", fontSize: 13, lineHeight: 1.5 }}>{children}</code>
+      </pre>
+    ) : (
       <code
         style={{
           background: C.paper2,
@@ -103,19 +118,8 @@ const mdComponents = (onCitationClick) => ({
       >
         {children}
       </code>
-    ) : (
-      <pre
-        style={{
-          background: C.paper2,
-          padding: "12px 14px",
-          borderRadius: "var(--radius-sm)",
-          overflowX: "auto",
-          margin: "8px 0",
-        }}
-      >
-        <code style={{ fontFamily: "monospace", fontSize: 13, lineHeight: 1.5 }}>{children}</code>
-      </pre>
-    ),
+    );
+  },
   pre: ({ children }) => <>{children}</>,
   table: ({ children }) => (
     <table style={{ borderCollapse: "collapse", width: "100%", margin: "8px 0", fontSize: 13 }}>
@@ -155,7 +159,9 @@ function AnswerBubble({ text, id, copiedKey, onCopy, streaming, onCitationClick 
         transition: "box-shadow .3s",
       }}
     >
-      <ReactMarkdown components={components}>{text}</ReactMarkdown>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+        {text}
+      </ReactMarkdown>
       <button
         onClick={() => onCopy(text, id)}
         style={{
