@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { C, sans } from "../theme";
@@ -846,26 +846,52 @@ function SummaryPanel({ docs, folders }) {
   const [showOriginal, setShowOriginal] = useState(false);
   const [originals, setOriginals] = useState({});
   const [origLoading, setOrigLoading] = useState(false);
+  const summaryAbortRef = useRef(null);
 
   const fetchSummary = async (docId, force = false) => {
     setSelectedDocId(docId);
     if (!force && summaries[docId]) return;
+
+    // 진행 중인 요약 취소
+    summaryAbortRef.current?.abort();
+    const controller = new AbortController();
+    summaryAbortRef.current = controller;
+    // 3분 클라이언트 타임아웃
+    const timeoutId = setTimeout(() => controller.abort("timeout"), 3 * 60 * 1000);
+
     setLoading(docId);
     setProgress("");
     try {
-      const r = await postSummary(docId, force);
+      const r = await postSummary(docId, force, controller.signal);
       if (!r.ok) throw new Error("요약 요청 실패");
-      await readSSE(r, {
-        progress: (e) => setProgress(e.message),
-        done: (e) => {
-          setSummaries((prev) => ({ ...prev, [docId]: e.summary || "요약 실패" }));
-          setCached((prev) => ({ ...prev, [docId]: !!e.cached }));
-          setProgress("");
+      await readSSE(
+        r,
+        {
+          progress: (e) => setProgress(e.message),
+          done: (e) => {
+            setSummaries((prev) => ({ ...prev, [docId]: e.summary || "요약 실패" }));
+            setCached((prev) => ({ ...prev, [docId]: !!e.cached }));
+            setProgress("");
+          },
         },
-      });
-    } catch {
-      setSummaries((prev) => ({ ...prev, [docId]: "요약 생성 중 오류가 발생했어요." }));
+        controller.signal,
+      );
+    } catch (e) {
+      if (controller.signal.aborted) {
+        setSummaries((prev) => ({
+          ...prev,
+          [docId]:
+            "⏱ 요약 생성 시간이 초과됐어요 (3분).\nOllama가 응답하지 않거나 모델이 로드 중일 수 있어요.\n잠시 후 재생성을 눌러보세요.",
+        }));
+      } else {
+        setSummaries((prev) => ({
+          ...prev,
+          [docId]: `오류: ${e.message || "요약 생성 중 문제가 발생했어요."}`,
+        }));
+      }
     } finally {
+      clearTimeout(timeoutId);
+      summaryAbortRef.current = null;
       setLoading(null);
     }
   };

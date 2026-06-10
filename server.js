@@ -276,15 +276,17 @@ async function extractTextOCR(buf, onProgress, pageFrom = null, pageTo = null) {
 }
 
 // ---------- Ollama 호출 ----------
-async function ollamaFetch(pathname, body) {
+async function ollamaFetch(pathname, body, signal) {
   let res;
   try {
     res = await fetch(`${OLLAMA_URL}${pathname}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
+      ...(signal && { signal }),
     });
   } catch (e) {
+    if (e?.name === "AbortError" || e?.name === "TimeoutError") throw e;
     const code = e?.cause?.code || e?.code || "";
     throw new Error(code === "ECONNREFUSED" ? "OLLAMA_DOWN" : "OLLAMA_FETCH", { cause: e });
   }
@@ -294,14 +296,12 @@ async function ollamaFetch(pathname, body) {
 // stream:false는 Ollama가 전체 생성 후 헤더를 보내 undici headersTimeout에 걸림.
 // stream:true로 호출해 토큰을 즉시 수신하고 누적 반환한다.
 // think:false — qwen3 계열의 불필요한 <think> 토큰 생성 방지 (속도 향상).
-async function ollamaGenerate(messages, options = {}) {
-  const res = await ollamaFetch("/api/chat", {
-    model: settings.chatModel,
-    messages,
-    stream: true,
-    think: false,
-    options,
-  });
+async function ollamaGenerate(messages, options = {}, signal) {
+  const res = await ollamaFetch(
+    "/api/chat",
+    { model: settings.chatModel, messages, stream: true, think: false, options },
+    signal,
+  );
   if (!res.ok) {
     const b = await res.text().catch(() => "");
     if (res.status === 404 || /not found|pull/i.test(b)) throw new Error("CHAT_MODEL_MISSING");
@@ -937,7 +937,11 @@ app.post("/api/summary", async (req, res) => {
     if (cur.length > 0) batches.push(cur.join("\n\n"));
 
     const callLLM = (prompt) =>
-      ollamaGenerate([{ role: "user", content: prompt }], { temperature: 0.2 });
+      ollamaGenerate(
+        [{ role: "user", content: prompt }],
+        { temperature: 0.2 },
+        AbortSignal.timeout(5 * 60 * 1000),
+      );
 
     let summary;
     if (batches.length === 1) {
@@ -959,7 +963,13 @@ app.post("/api/summary", async (req, res) => {
     send({ type: "done", summary });
     res.end();
   } catch (e) {
-    send({ type: "error", error: e.message || "요약 생성 중 오류" });
+    const isTimeout = e?.name === "TimeoutError" || e?.name === "AbortError";
+    send({
+      type: "error",
+      error: isTimeout
+        ? "요약 생성 시간이 초과됐어요 (5분). Ollama가 응답하지 않거나 모델이 로드 중일 수 있어요."
+        : e.message || "요약 생성 중 오류",
+    });
     res.end();
   }
 });

@@ -109,11 +109,12 @@ export const postQuiz = (docId, count = 10, types = ["mc"]) =>
 
 export const fetchDocText = (docId) => fetch(`/api/docs/${docId}/text`).then((r) => r.json());
 
-export const postSummary = (docId, force = false) =>
+export const postSummary = (docId, force = false, signal) =>
   fetch("/api/summary", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ docId, ...(force && { force: true }) }),
+    ...(signal && { signal }),
   });
 
 // ── SSE 파서 ──────────────────────────────────────────────────────────────────
