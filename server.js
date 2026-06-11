@@ -960,7 +960,7 @@ app.post("/api/summary", async (req, res) => {
     const callLLM = (prompt) =>
       ollamaGenerate(
         [{ role: "user", content: prompt }],
-        { temperature: 0.2 },
+        { temperature: 0.2, num_ctx: 32768 },
         AbortSignal.timeout(10 * 60 * 1000),
         settings.summaryModel,
       );
