@@ -856,8 +856,8 @@ function SummaryPanel({ docs, folders }) {
     summaryAbortRef.current?.abort();
     const controller = new AbortController();
     summaryAbortRef.current = controller;
-    // 3분 클라이언트 타임아웃
-    const timeoutId = setTimeout(() => controller.abort("timeout"), 3 * 60 * 1000);
+    // 20분 클라이언트 타임아웃
+    const timeoutId = setTimeout(() => controller.abort("timeout"), 20 * 60 * 1000);
 
     setLoading(docId);
     setProgress("");
@@ -881,7 +881,7 @@ function SummaryPanel({ docs, folders }) {
         setSummaries((prev) => ({
           ...prev,
           [docId]:
-            "⏱ 요약 생성 시간이 초과됐어요 (3분).\nOllama가 응답하지 않거나 모델이 로드 중일 수 있어요.\n잠시 후 재생성을 눌러보세요.",
+            "⏱ 요약 생성 시간이 초과됐어요 (20분).\nOllama가 응답하지 않거나 모델이 로드 중일 수 있어요.\n잠시 후 재생성을 눌러보세요.",
         }));
       } else {
         setSummaries((prev) => ({

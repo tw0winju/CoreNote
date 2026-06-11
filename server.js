@@ -895,7 +895,7 @@ app.post("/api/quiz", async (req, res) => {
 });
 
 // ---------- 문서 요약 (SSE, 다중패스) ----------
-const SUMMARY_BATCH_CHARS = 22000; // ~11k 토큰 — 32k 컨텍스트에서 안전한 배치 크기
+const SUMMARY_BATCH_CHARS = 36000; // ~18k 토큰 — 32k 컨텍스트 내 최대 안전 배치 크기
 
 app.post("/api/summary", async (req, res) => {
   const { docId, force = false } = req.body;
@@ -958,7 +958,7 @@ app.post("/api/summary", async (req, res) => {
       ollamaGenerate(
         [{ role: "user", content: prompt }],
         { temperature: 0.2 },
-        AbortSignal.timeout(5 * 60 * 1000),
+        AbortSignal.timeout(10 * 60 * 1000),
       );
 
     let summary;
@@ -985,7 +985,7 @@ app.post("/api/summary", async (req, res) => {
     send({
       type: "error",
       error: isTimeout
-        ? "요약 생성 시간이 초과됐어요 (5분). Ollama가 응답하지 않거나 모델이 로드 중일 수 있어요."
+        ? "요약 생성 시간이 초과됐어요 (배치당 10분). Ollama가 응답하지 않거나 모델이 로드 중일 수 있어요."
         : e.message || "요약 생성 중 오류",
     });
     res.end();
