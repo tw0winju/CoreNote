@@ -51,6 +51,7 @@ app.use((err, req, res, next) => {
 const DEFAULT_SETTINGS = {
   chatModel: process.env.OLLAMA_MODEL || "qwen3:8b",
   embedModel: process.env.EMBED_MODEL || "bge-m3",
+  summaryModel: "qwen3:1.7b",
   maxChunkChars: Number(process.env.MAX_CHUNK_CHARS || 1200),
   topK: Number(process.env.TOP_K || 5),
   hydeEnabled: false,
@@ -302,10 +303,10 @@ async function ollamaFetch(pathname, body, signal) {
 // stream:false는 Ollama가 전체 생성 후 헤더를 보내 undici headersTimeout에 걸림.
 // stream:true로 호출해 토큰을 즉시 수신하고 누적 반환한다.
 // think:false — qwen3 계열의 불필요한 <think> 토큰 생성 방지 (속도 향상).
-async function ollamaGenerate(messages, options = {}, signal) {
+async function ollamaGenerate(messages, options = {}, signal, model) {
   const res = await ollamaFetch(
     "/api/chat",
-    { model: settings.chatModel, messages, stream: true, think: false, options },
+    { model: model || settings.chatModel, messages, stream: true, think: false, options },
     signal,
   );
   if (!res.ok) {
@@ -756,6 +757,7 @@ app.post("/api/settings", (req, res) => {
   const {
     chatModel,
     embedModel,
+    summaryModel,
     maxChunkChars,
     topK,
     hydeEnabled,
@@ -765,6 +767,7 @@ app.post("/api/settings", (req, res) => {
   } = req.body;
   if (chatModel !== undefined) settings.chatModel = String(chatModel).trim();
   if (embedModel !== undefined) settings.embedModel = String(embedModel).trim();
+  if (summaryModel !== undefined) settings.summaryModel = String(summaryModel).trim();
   if (maxChunkChars !== undefined) settings.maxChunkChars = Math.max(200, Number(maxChunkChars));
   if (topK !== undefined) settings.topK = Math.max(1, Number(topK));
   if (hydeEnabled !== undefined) settings.hydeEnabled = Boolean(hydeEnabled);
@@ -959,6 +962,7 @@ app.post("/api/summary", async (req, res) => {
         [{ role: "user", content: prompt }],
         { temperature: 0.2 },
         AbortSignal.timeout(10 * 60 * 1000),
+        settings.summaryModel,
       );
 
     let summary;
@@ -968,11 +972,11 @@ app.post("/api/summary", async (req, res) => {
     } else {
       const subSummaries = [];
       for (let i = 0; i < batches.length; i++) {
-        send({ type: "progress", message: `내용 분석 중… (${i + 1}/${batches.length} 파트)` });
+        send({ type: "progress", message: `분석 중… (${i + 1}/${batches.length} 파트)` });
         const sub = await callLLM(batchSummaryPrompt(i + 1, batches.length, batches[i]));
         subSummaries.push(sub);
+        send({ type: "partial", index: i, total: batches.length, text: sub });
       }
-      // 통합 LLM 호출 생략 — 각 배치 요약을 그대로 이어붙임 (정보 손실 방지)
       summary = subSummaries.join("\n\n---\n\n");
     }
 

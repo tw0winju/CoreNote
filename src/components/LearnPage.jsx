@@ -843,6 +843,7 @@ function SummaryPanel({ docs, folders }) {
   const [cached, setCached] = useState({});
   const [loading, setLoading] = useState(null);
   const [progress, setProgress] = useState("");
+  const [partials, setPartials] = useState({});
   const [showOriginal, setShowOriginal] = useState(false);
   const [originals, setOriginals] = useState({});
   const [origLoading, setOrigLoading] = useState(false);
@@ -861,6 +862,7 @@ function SummaryPanel({ docs, folders }) {
 
     setLoading(docId);
     setProgress("");
+    setPartials((prev) => ({ ...prev, [docId]: [] }));
     try {
       const r = await postSummary(docId, force, controller.signal);
       if (!r.ok) throw new Error("요약 요청 실패");
@@ -868,9 +870,15 @@ function SummaryPanel({ docs, folders }) {
         r,
         {
           progress: (e) => setProgress(e.message),
+          partial: (e) =>
+            setPartials((prev) => ({
+              ...prev,
+              [docId]: [...(prev[docId] || []), { index: e.index, total: e.total, text: e.text }],
+            })),
           done: (e) => {
             setSummaries((prev) => ({ ...prev, [docId]: e.summary || "요약 실패" }));
             setCached((prev) => ({ ...prev, [docId]: !!e.cached }));
+            setPartials((prev) => ({ ...prev, [docId]: [] }));
             setProgress("");
           },
         },
@@ -1019,28 +1027,51 @@ function SummaryPanel({ docs, folders }) {
 
         {/* 로딩 */}
         {selectedDocId && loading === selectedDocId && (
-          <div
-            style={{
-              color: C.inkSoft,
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              paddingTop: 8,
-            }}
-          >
-            <span
-              className="spin"
-              style={{
-                width: 16,
-                height: 16,
-                border: `2px solid ${C.accentSoft}`,
-                borderTopColor: C.accent,
-                borderRadius: "50%",
-                display: "inline-block",
-                flexShrink: 0,
-              }}
-            />
-            {progress || "요약 생성 중…"}
+          <div style={{ paddingTop: 8, display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ color: C.inkSoft, display: "flex", alignItems: "center", gap: 8 }}>
+              <span
+                className="spin"
+                style={{
+                  width: 16,
+                  height: 16,
+                  border: `2px solid ${C.accentSoft}`,
+                  borderTopColor: C.accent,
+                  borderRadius: "50%",
+                  display: "inline-block",
+                  flexShrink: 0,
+                }}
+              />
+              {progress || "요약 생성 중…"}
+            </div>
+            {/* 부분 결과 즉시 표시 */}
+            {(partials[selectedDocId] || []).map((p) => (
+              <div key={p.index} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: C.accent,
+                    fontWeight: 600,
+                    letterSpacing: ".04em",
+                  }}
+                >
+                  파트 {p.index + 1} / {p.total}
+                </div>
+                <div
+                  style={{
+                    fontSize: 13.5,
+                    lineHeight: 1.75,
+                    color: C.ink,
+                    background: C.paper2,
+                    borderRadius: "var(--radius-sm)",
+                    padding: "10px 14px",
+                    border: `1px solid ${C.line}`,
+                    whiteSpace: "pre-wrap",
+                  }}
+                >
+                  {p.text}
+                </div>
+              </div>
+            ))}
           </div>
         )}
 

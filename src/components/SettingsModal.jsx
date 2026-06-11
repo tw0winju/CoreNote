@@ -137,6 +137,12 @@ export default function SettingsModal({ form, setForm, onSave, onClose }) {
                 onChange={(e) => set("embedModel", e.target.value)}
               />
             </Field>
+            <Field label="요약 모델" hint="요약 전용 모델. 소형 모델 사용 시 3~5배 빠릅니다.">
+              <TextInput
+                value={form.summaryModel || ""}
+                onChange={(e) => set("summaryModel", e.target.value)}
+              />
+            </Field>
           </div>
         </div>
 
