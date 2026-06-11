@@ -848,10 +848,19 @@ async function generateQuizQuestions(type, count, text) {
         ? quizSaPrompt(count, text)
         : quizMcPrompt(count, text);
   try {
-    const cleaned = await ollamaGenerate([{ role: "user", content: prompt }], { temperature: 0.4 });
-    const match = cleaned.match(/\[[\s\S]*\]/);
-    if (!match) return [];
-    return JSON.parse(match[0])
+    const cleaned = await ollamaGenerate(
+      [{ role: "user", content: prompt }],
+      { temperature: 0.4, num_ctx: 8192 },
+      AbortSignal.timeout(90_000),
+    );
+    const arrMatch = cleaned.match(/\[[\s\S]*\]/);
+    const objMatch = cleaned.match(/\{[\s\S]*\}/);
+    const raw = arrMatch ? arrMatch[0] : objMatch ? `[${objMatch[0]}]` : null;
+    if (!raw) {
+      console.warn(`[quiz] ${type}: LLM이 JSON을 반환하지 않음. 출력:`, cleaned.slice(0, 200));
+      return [];
+    }
+    return JSON.parse(raw)
       .filter((q) => {
         if (!q.q || !q.a) return false;
         if (type === "mc" && !q.options?.length) return false;
@@ -859,7 +868,8 @@ async function generateQuizQuestions(type, count, text) {
       })
       .slice(0, count)
       .map((q) => ({ ...q, type }));
-  } catch {
+  } catch (e) {
+    console.error(`[quiz] ${type} 생성 오류:`, e.message);
     return [];
   }
 }

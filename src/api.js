@@ -111,6 +111,7 @@ export const postQuiz = (docId, count = 10, types = ["mc"]) =>
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ docId, count, types }),
+    signal: AbortSignal.timeout(120_000),
   }).then((r) => r.json());
 
 export const fetchDocText = (docId) => fetch(`/api/docs/${docId}/text`).then((r) => r.json());

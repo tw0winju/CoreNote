@@ -444,7 +444,11 @@ function QuizPanel({ docs, folders }) {
       if (!data.questions?.length) throw new Error("퀴즈를 생성하지 못했어요.");
       setQuestions(data.questions);
     } catch (e) {
-      setError(e.message);
+      if (e?.name === "TimeoutError" || e?.name === "AbortError") {
+        setError("⏱ 퀴즈 생성 시간이 초과됐어요 (2분). Ollama가 바쁜 경우 잠시 후 다시 시도하세요.");
+      } else {
+        setError(e.message || "퀴즈 생성 중 오류가 발생했어요.");
+      }
     } finally {
       setLoading(false);
     }
@@ -586,7 +590,7 @@ function QuizPanel({ docs, folders }) {
             transition: "all .15s",
           }}
         >
-          {loading ? "생성 중…" : "퀴즈 생성"}
+          {loading ? "생성 중… (30~60초)" : "퀴즈 생성"}
         </button>
 
         {error && (
