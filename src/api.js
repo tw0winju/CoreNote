@@ -30,6 +30,12 @@ export const patchFolderName = (id, name) =>
     body: JSON.stringify({ name }),
   });
 export const deleteFolder = (id) => fetch(`/api/folders/${id}`, { method: "DELETE" });
+export const patchFolderOrder = (ids) =>
+  fetch("/api/folders/reorder", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids }),
+  });
 
 // ── 색인 ──────────────────────────────────────────────────────────────────────
 export const postIndexFile = (base64, filename, pageFrom = null, pageTo = null, folderId = null) =>

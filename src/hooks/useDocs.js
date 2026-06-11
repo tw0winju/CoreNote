@@ -8,6 +8,7 @@ import {
   postFolder,
   patchFolderName,
   deleteFolder,
+  patchFolderOrder,
 } from "../api";
 
 export default function useDocs() {
@@ -125,6 +126,15 @@ export default function useDocs() {
     } catch {}
   };
 
+  const reorderFolders = (ids) => {
+    // 낙관적 업데이트: id 순서대로 즉시 반영
+    setFolders((prev) => {
+      const map = Object.fromEntries(prev.map((f) => [f.id, f]));
+      return ids.map((id, i) => ({ ...map[id], order: i })).filter(Boolean);
+    });
+    patchFolderOrder(ids).catch(() => loadDocs()); // 실패 시 서버 상태로 복구
+  };
+
   const removeFolder = async (id) => {
     try {
       await deleteFolder(id);
@@ -164,5 +174,6 @@ export default function useDocs() {
     cancelRenameFolder,
     commitRenameFolder,
     removeFolder,
+    reorderFolders,
   };
 }

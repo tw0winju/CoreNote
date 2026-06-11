@@ -91,6 +91,12 @@ function saveDocs() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.writeFileSync(DOCS_PATH, JSON.stringify({ docs, folders }));
 }
+// order 필드 없는 기존 폴더에 일괄 부여 (이름순 기준)
+if (folders.some((f) => f.order === undefined)) {
+  folders.sort((a, b) => a.name.localeCompare(b.name));
+  folders.forEach((f, i) => { f.order = i; });
+  saveDocs();
+}
 
 // ---------- 요약 캐시 ----------
 function loadSummaries() {
@@ -645,7 +651,7 @@ app.post("/api/index-url", async (req, res) => {
 app.get("/api/docs", (_req, res) => {
   res.json({
     docs: docs.slice().sort((a, b) => b.addedAt - a.addedAt),
-    folders: folders.slice().sort((a, b) => a.name.localeCompare(b.name)),
+    folders: folders.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
   });
 });
 
@@ -690,9 +696,21 @@ app.post("/api/folders", (req, res) => {
   const name = req.body.name?.trim();
   if (!name) return res.status(400).json({ error: "폴더 이름이 없습니다." });
   const id = crypto.randomUUID();
-  folders.push({ id, name, createdAt: Date.now() });
+  const order = folders.length > 0 ? Math.max(...folders.map((f) => f.order ?? 0)) + 1 : 0;
+  folders.push({ id, name, createdAt: Date.now(), order });
   saveDocs();
   res.json({ id, name });
+});
+
+app.patch("/api/folders/reorder", (req, res) => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids)) return res.status(400).json({ error: "ids 배열이 필요합니다." });
+  ids.forEach((id, i) => {
+    const f = folders.find((f) => f.id === id);
+    if (f) f.order = i;
+  });
+  saveDocs();
+  res.json({ ok: true });
 });
 
 app.patch("/api/folders/:id", (req, res) => {

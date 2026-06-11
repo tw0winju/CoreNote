@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { C, sans, shadow } from "../theme";
 
 // ── 폴더 행 ───────────────────────────────────────────────────────────────────
-function FolderRow({ folder, docs, docsHook, onDrop }) {
+function FolderRow({ folder, docs, docsHook, onDrop, isFolderDragging, onFolderDragStart, onFolderDragEnd }) {
   const {
     selectedDocs,
     toggleFolder,
@@ -25,11 +25,13 @@ function FolderRow({ folder, docs, docsHook, onDrop }) {
   return (
     <div
       onDragOver={(e) => {
+        if (isFolderDragging || e.dataTransfer.types.includes("application/folder")) return;
         e.preventDefault();
         setDropOver(true);
       }}
       onDragLeave={() => setDropOver(false)}
       onDrop={(e) => {
+        if (isFolderDragging || e.dataTransfer.types.includes("application/folder")) return;
         e.preventDefault();
         setDropOver(false);
         const d = e.dataTransfer.getData("docId");
@@ -50,6 +52,16 @@ function FolderRow({ folder, docs, docsHook, onDrop }) {
           transition: "all .15s",
         }}
       >
+        {/* 드래그 핸들 */}
+        <div
+          draggable
+          onDragStart={(e) => { e.stopPropagation(); onFolderDragStart?.(e, folder.id); }}
+          onDragEnd={(e) => { e.stopPropagation(); onFolderDragEnd?.(); }}
+          title="드래그하여 순서 변경"
+          style={{ cursor: "grab", color: C.inkSoft, fontSize: 11, lineHeight: 1, flexShrink: 0, padding: "0 1px", userSelect: "none" }}
+        >
+          ⠿
+        </div>
         {/* 전체 선택 */}
         <button
           onClick={() => toggleFolder(folder.id)}
@@ -414,6 +426,8 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
   const [newFolderName, setNewFolderName] = useState("");
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [docSearch, setDocSearch] = useState("");
+  const [folderDragId, setFolderDragId] = useState(null);
+  const [folderOverIdx, setFolderOverIdx] = useState(null);
 
   const searchLower = docSearch.toLowerCase();
   const filteredDocs = docSearch
@@ -429,6 +443,33 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
     : folders;
 
   const handleDocDrop = (docId, folderId) => moveDoc(docId, folderId);
+
+  const handleFolderDragStart = (e, folderId) => {
+    e.dataTransfer.setData("application/folder", folderId);
+    e.dataTransfer.effectAllowed = "move";
+    setFolderDragId(folderId);
+  };
+
+  const handleFolderDragEnd = () => {
+    setFolderDragId(null);
+    setFolderOverIdx(null);
+  };
+
+  const handleFolderReorder = (e, idx) => {
+    const draggedId = e.dataTransfer.getData("application/folder");
+    if (!draggedId) return;
+    e.preventDefault();
+    const from = visibleFolders.findIndex((f) => f.id === draggedId);
+    const to = folderOverIdx ?? idx;
+    if (from !== -1 && to !== from && to !== from + 1) {
+      const next = [...visibleFolders];
+      const [removed] = next.splice(from, 1);
+      next.splice(from < to ? to - 1 : to, 0, removed);
+      docsHook.reorderFolders(next.map((f) => f.id));
+    }
+    setFolderDragId(null);
+    setFolderOverIdx(null);
+  };
 
   const handleCreateFolder = async () => {
     const name = newFolderName.trim();
@@ -848,23 +889,46 @@ export default function Library({ docs: docsHook, indexing: indexingHook }) {
           </div>
         )}
 
-        {visibleFolders.map((folder) => (
-          <FolderRow
+        {visibleFolders.map((folder, idx) => (
+          <div
             key={folder.id}
-            folder={folder}
-            docs={filteredDocs}
-            docsHook={docsHook}
-            onDrop={handleDocDrop}
-          />
+            onDragOver={(e) => {
+              if (!e.dataTransfer.types.includes("application/folder")) return;
+              e.preventDefault();
+              const rect = e.currentTarget.getBoundingClientRect();
+              setFolderOverIdx(e.clientY < rect.top + rect.height / 2 ? idx : idx + 1);
+            }}
+            onDrop={(e) => handleFolderReorder(e, idx)}
+          >
+            {folderDragId && folderOverIdx === idx && (
+              <div style={{ height: 2, background: C.accent, borderRadius: 1, marginBottom: 3 }} />
+            )}
+            <div style={{ opacity: folderDragId === folder.id ? 0.4 : 1 }}>
+              <FolderRow
+                folder={folder}
+                docs={filteredDocs}
+                docsHook={docsHook}
+                onDrop={handleDocDrop}
+                isFolderDragging={!!folderDragId}
+                onFolderDragStart={handleFolderDragStart}
+                onFolderDragEnd={handleFolderDragEnd}
+              />
+            </div>
+          </div>
         ))}
+        {folderDragId && folderOverIdx === visibleFolders.length && (
+          <div style={{ height: 2, background: C.accent, borderRadius: 1, marginBottom: 3 }} />
+        )}
 
         <div
           onDragOver={(e) => {
+            if (e.dataTransfer.types.includes("application/folder")) return;
             e.preventDefault();
             setRootDropOver(true);
           }}
           onDragLeave={() => setRootDropOver(false)}
           onDrop={(e) => {
+            if (e.dataTransfer.types.includes("application/folder")) return;
             e.preventDefault();
             setRootDropOver(false);
             const d = e.dataTransfer.getData("docId");
